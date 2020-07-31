@@ -19,10 +19,10 @@ FORCE F64 pf:pot
 F64 eps2
 
 rij    = xi - xj
-r3_inv = rij * rij + eps2
-r_inv  = rsqrt(r3_inv)
-r3_inv = r_inv * r_inv
-r_inv  = mj * r_inv
-r3_inv = r3_inv * r_inv
-af    -= r3_inv * rij
-pf    -= r_inv
+r2 = rij * rij + eps2
+r_inv  = rsqrt(r2)
+r2_inv = r_inv * r_inv
+mr_inv  = mj * r_inv
+mr3_inv = r2_inv * mr_inv
+af    -= mr3_inv * rij
+pf    -= mr_inv
