@@ -1,15 +1,15 @@
-require "common.rb"
-require "intermediate_exp_class.rb"
-require "disassemble_statement.rb"
-require "kernelparser.rb"
-require "expand_function.rb"
-require "reduce_madd.rb"
-require "loop_fission.rb"
-require "software_pipelining.rb"
+require_relative 'common.rb'
+require_relative "intermediate_exp_class.rb"
+require_relative "disassemble_statement.rb"
+require_relative "kernelparser.rb"
+require_relative "expand_function.rb"
+require_relative "reduce_madd.rb"
+require_relative "loop_fission.rb"
+require_relative "software_pipelining.rb"
 
-require "A64FX.rb"
-require "AVX-512.rb"
-require "AVX2.rb"
+require_relative "A64FX.rb"
+require_relative "AVX-512.rb"
+require_relative "AVX2.rb"
 
 $dimension = 3
 $reserved_function = ["rsqrt","sqrt","inv","max","min","madd","msub","nmadd","nmsub","table","to_int","to_uint","to_float"]

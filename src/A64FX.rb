@@ -1,5 +1,5 @@
-require "common.rb"
-require "loop_fission.rb"
+require_relative "common.rb"
+require_relative "loop_fission.rb"
 
 def get_declare_type_a64fx(type)
   case type

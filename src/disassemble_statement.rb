@@ -1,4 +1,4 @@
-require "common.rb"
+require_relative "common.rb"
 
 class Kernelprogram
   def disassemble_statement(h = $varhash)

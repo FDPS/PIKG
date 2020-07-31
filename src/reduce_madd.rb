@@ -1,4 +1,4 @@
-require "common.rb"
+require_relative "common.rb"
 
 class Statement
   def reduce_madd

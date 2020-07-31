@@ -1,9 +1,8 @@
 CC=g++
 CCFLAGS= -O2 
 
-RUBY=/usr/local/opt/ruby/bin/ruby
 PIKG_ROOT=../../
-PIKG=$(RUBY) -I$(PIKG_ROOT)/src $(PIKG_ROOT)/src/parserdriver.rb
+PIKG=$(PIKG_ROOT)/bin/pikg
 CONVERSION_TYPE=reference
 CCFLAGS += -I../../inc
 

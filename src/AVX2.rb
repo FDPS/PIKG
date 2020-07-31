@@ -1,4 +1,4 @@
-require "common.rb"
+require_relative "common.rb"
 
 def get_declare_type_avx2(type)
   case type

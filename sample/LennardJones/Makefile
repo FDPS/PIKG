@@ -1,11 +1,10 @@
 CC=g++
 CCFLAGS= -O2 
-
-RUBY=/usr/local/opt/ruby/bin/ruby
-PIKG_ROOT=../../
-PIKG=$(RUBY) -I$(PIKG_ROOT)/src $(PIKG_ROOT)/src/parserdriver.rb
-CONVERSION_TYPE=reference
 CCFLAGS += -I../../inc
+
+PIKG_ROOT=../../
+PIKG=$(PIKG_ROOT)/bin/pikg
+CONVERSION_TYPE=reference
 
 PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name EP --epj-name EP --force-name Force
 # AVX2 mode
