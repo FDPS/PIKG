@@ -1,5 +1,5 @@
 # PIKG
-本プロジェクトは，FDPS( https://github.com/FDPS/FDPS )およびその他の粒子系シミュレータの粒子間相互作用カーネル関数の自動ジェネレータである．
+本プロジェクトは，FDPS( https://github.com/FDPS/FDPS )およびその他の粒子系シミュレータの粒子間相互作用カーネル関数の自動ジェネレータである.
 粒子間相互作用をDSLで記述し，パラメータを指定すると，任意のアーキテクチャ(Intel CPU, Fujitsu A64FX, NVIDIA GPU, PEZY-SC2, etc.)向けのカーネルを生成する．
 
 # 言葉の定義
@@ -28,6 +28,14 @@ $(PIKG_DIR)/bin/pikg -i (input_file) -o (output_file) [options]
 ```
 output_fileにC++のヘッダーファイルができるので相互作用計算の構造体(デフォルトclass名Kernel)を利用する
 生成されたヘッダーファイルを利用してコンパイルする際には./inc/pikg_vetor.hppに宣言されている型が使われているのでインクルードする
+詳細についてはdoc/kernel_generator_spec/pdfを参照ください．
+
+現在参照できるサンプルは以下のとおりです．
+-sample-LennardJones Lennard-Jones粒子の分子動力学シミュレーション
+       |
+       -Nbody Cold CollapseのN体シミュレーション
+
+それぞれに関しては，各ディレクトリのREADME.mdをご参照ください．
 
 # 目標ターゲット命令セット
 - AVX2
