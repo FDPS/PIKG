@@ -1232,6 +1232,9 @@ while true
   when "-i"
     filename = ARGV.shift
     warn "input file: #{filename}\n"
+  when "--input"
+    filename = ARGV.shift
+    warn "input file: #{filename}\n"
   when "--kernel-name"
     $kernel_name = ARGV.shift
     warn "kernel name: #{$kernel_name}\n"
@@ -1260,6 +1263,9 @@ while true
   when "--unroll"
     $unroll_stage = ARGV.shift.to_i
     warn "software pipelining stage: #{$unroll_stage}\n"
+  when "-o"
+    $output_file = ARGV.shift
+    warn "output file name: #{$output_file}\n"
   when "--output"
     $output_file = ARGV.shift
     warn "output file name: #{$output_file}\n"

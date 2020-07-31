@@ -22,6 +22,13 @@
 # 文法
 仕様書(doc/kernel_generator_spec.pdf)を参照のこと．
 
+# how to use
+```
+$(PIKG_DIR)/bin/pikg -i (input_file) -o (output_file) [options]
+```
+output_fileにC++のヘッダーファイルができるので相互作用計算の構造体(デフォルト名カーネル)を利用する
+生成されたヘッダーファイルを利用してコンパイルする際には./inc/pikg_vetor.hppに宣言されている型が使われているのでインクルードする
+
 # 目標ターゲット命令セット
 - AVX2
 - AVX-512
