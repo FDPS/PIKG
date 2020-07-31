@@ -18,7 +18,7 @@
 %\parskip 5 pt
 \title{PIKG仕様書\\
 {\large 
-Ver 0.0 --- 2019/12/23\\
+Ver 0.0 --- 2020/7/31\\
 }
 }
 \author{野村昴太郎}
@@ -31,14 +31,9 @@ Ver 0.0 --- 2019/12/23\\
 
 \section{TODO}
  \begin{itemize}
-  \item カーネルジェネレータの仕様を決定する
-  \item 関数をインライン展開する方法を考える
   \item FXXmat関連の演算や型推論が実装されていない
-  \item "."演算子でFXXmatやFXXvecのメンバ変数を使った場合の実装がされていない
-  \item FXXmatやFXXvecの演算を個別の演算に分解する機能が必要
   \item 現状勝手にアップキャストされてしまうが，低精度を維持したい場合，statementの先頭に型宣言ができる必要がある
   \item 16 bit型の演算をサポートする
-  \item 「FDPSに準じる」部分をき直す
  \end{itemize}
 \section{履歴}
 \label{sect:4}
@@ -48,6 +43,8 @@ Ver 0.0 --- 2019/12/23\\
 カーネルジェネレータ周りのTODOを追加．
 \subsection{2020/5/7}
 カーネルジェネレータの名前をPIKGに変更．
+\subsection{2020/7/31}
+0.0版リリース向けに改定
 
 \section{はじめに}
 %本書はFDPS向けのカーネル関数のソースコードジェネレータの仕様書である．
