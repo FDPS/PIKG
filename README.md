@@ -31,9 +31,8 @@ output_fileにC++のヘッダーファイルができるので相互作用計算
 詳細についてはdoc/kernel_generator_spec/pdfを参照ください．
 
 現在参照できるサンプルは以下のとおりです．
--sample-LennardJones Lennard-Jones粒子の分子動力学シミュレーション
-       |
-       -Nbody Cold CollapseのN体シミュレーション
+> ./sample/LennardJones
+> ./sample/Nbody
 
 それぞれに関しては，各ディレクトリのREADME.mdをご参照ください．
 
