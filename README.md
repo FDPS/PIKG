@@ -48,3 +48,15 @@ output_fileにC++のヘッダーファイルができるので相互作用計算
 - AVX2
 - AVX-512
 - ARM SVE
+
+# 参考性能
+N体計算カーネルのシングルスレッド性能をアセンブラレベルでチューニングされている(AVX2のみ)ライブラリPhantom-GRAPE( https://bitbucket.org/kohji/phantom-grape/src/master/ )との比較として置いておく．
+性能計測にはFDPSのサンプル「nbody」を利用した．
+AVX2/AVX-512の計測ではIntel Xeon Gold 6140を，ARM SVEでの計測にはFujitsu A64FXを利用．単位はGflops．n_group_limit(FDPSに渡されるパラメータ．この数までの粒子の相互作用リストを一つにまとめる)は512．
+
+|    | AVX2 | AVX-512 | ARM SVE |
+|----|------|---------|---------|
+|  PG| 59.4 |  97.0   |   N/A   |
+|PIKG| 66.8 | 108.6   |  34.3   |
+
+
