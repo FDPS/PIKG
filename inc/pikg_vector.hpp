@@ -116,20 +116,14 @@ namespace PIKG{
     }
 
     const T & operator[](const int i) const {
+      assert(i>=0 && i<3);
       if(0==i) return x;
       if(1==i) return y;
-      if(2==i) return z;
-      std::cout<<"PS_ERROR: Vector invalid access. \n"<<"function: "<<__FUNCTION__<<", line: "<<__LINE__<<", file: "<<__FILE__<<std::endl;		
-      std::cerr<<"Vector element="<<i<<" is not valid."<<std::endl;
-#ifdef PARTICLE_SIMULATOR_MPI_PARALLEL
-      MPI_Abort(MPI_COMM_WORLD,-1);
-#endif //PARTICLE_SIMULATOR_MPI_PARALLEL
-      exit(-1);
-      return x; //dummy for avoid warning
+      return z;
     }
 
     T & operator[](const int i){
-      assert(i<3);
+      assert(i>=0 && i<3);
       if(0==i) return x;
       if(1==i) return y;
       return z;
@@ -282,10 +276,12 @@ namespace PIKG{
     }
 
     T& operator[](const int i){
+      assert(i>=0 && i<2);
       if(0==i) return x;
       return y;
     }
     const T & operator[](const int i) const {
+      assert(i>=0 && i<2);
       if(0==i) return x;
       return y;
     }
