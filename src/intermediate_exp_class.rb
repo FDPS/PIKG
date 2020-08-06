@@ -677,7 +677,11 @@ class StoreState
     when /A64FX/
       ret = "svst1_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@dest.convert_to_code(conversion_type)},#{@src.convert_to_code(conversion_type)});"
     when /AVX2/
-      ret = "_mm256_storeu_#{get_type_suffix_avx2(@type)}(#{@dest.convert_to_code(conversion_type)},#{@src.convert_to_code(conversion_type)});"
+      if @type =~ /^(S|U)(64|32)/
+        ret = "_mm256_storeu_si256((__m256i*)#{@dest.convert_to_code(conversion_type)},#{@src.convert_to_code(conversion_type)});"
+      else
+        ret = "_mm256_storeu_#{get_type_suffix_avx2(@type)}(#{@dest.convert_to_code(conversion_type)},#{@src.convert_to_code(conversion_type)});"
+      end
     when /AVX-512/
       ret = "_mm512_store_#{get_type_suffix_avx512(@type)}(#{@dest.convert_to_code(conversion_type)},#{@src.convert_to_code(conversion_type)});"
     end
@@ -700,7 +704,11 @@ class LoadState
     when /A64FX/
       ret = "#{@dest.convert_to_code(conversion_type)} = svld1_#{get_type_suffix_a64fx(type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)});"
     when /AVX2/
-      ret = "#{@dest.convert_to_code(conversion_type)} = _mm256_loadu_#{get_type_suffix_avx2(type)}(#{@src.convert_to_code(conversion_type)});"
+      if @type =~ /^(S|U)(64|32)/
+        ret = "#{@dest.convert_to_code(conversion_type)} = _mm256_loadu_si256((__256i const*)#{@src.convert_to_code(conversion_type)});"
+      else
+        ret = "#{@dest.convert_to_code(conversion_type)} = _mm256_loadu_#{get_type_suffix_avx512(type)}(#{@src.convert_to_code(conversion_type)});"
+      end
     when /AVX-512/
       ret = "#{@dest.convert_to_code(conversion_type)} = _mm512_load_#{get_type_suffix_avx512(type)}(#{@src.convert_to_code(conversion_type)});"
     end
@@ -719,13 +727,16 @@ class PointerOf
     when /F32/
       "float*"
     when /S64/
-      "long*"
+    #"long long int*"
+      "int64_t*"
     when /S32/
-      "int*"
+      "int32_t*"
     when /U64/
-      "unsigned long long*"
+    #"unsigned long long int*"
+      "uint64_t*"
     when /U32/
-      "unsigned int*"
+      #"unsigned int*"
+      "uint32_t*"
     end
   end
 
