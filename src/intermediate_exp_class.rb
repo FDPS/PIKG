@@ -438,7 +438,9 @@ class Statement
   def replace_name(orig,replaced)
     abort "name must be Strinng class to replace" if orig.class != String || replaced.class != String
     if @name.class == String && @name == orig
-      @name =  replaced
+      @name = replaced
+    elsif @name.class == Expression && @name.operator == :dot && @name.lop == orig
+      @name.lop = replaced
     end
   end
 
@@ -572,6 +574,25 @@ class FuncCall
       ret |= op.isJRelated(list)
     }
     ret
+  end
+
+  def replace_recursive(orig,replaced)
+    @ops.each{ |op|
+      if orig.class == String
+        op = op.replace_recursive(orig,replaced)
+      elsif orig.class == Expression && orig.operator == :dot
+        op = op.replace_recursive(orig.lop,replaced)
+      else
+        abort "error: #{orig} cannot be replaced with #{replaced} in FuncCall"
+      end
+    }
+    self
+  end
+
+  def replace_by_list(name_list,replaced_list)
+    name_list.zip(replaced_list){ |n,r|
+      self.replace_recursive(n,r)
+    }
   end
   
   def convert_to_code(conversion_type)
@@ -1350,8 +1371,19 @@ class Expression
   end
 
   def replace_recursive(orig,replaced)
-    @lop = @lop.replace_recursive(orig,replaced)
-    @rop = @rop.replace_recursive(orig,replaced) if @rop != nil
+    if @operator == :dot
+      if orig.class == Expression && orig.operator == :dot
+        if @lop.class == String
+          @lop = replaced if @lop == orig.lop && @rop == orig.rop
+        end
+      else
+        @lop = @lop.replace_recursive(orig,replaced)
+        @rop = @rop.replace_recursive(orig,replaced) if @rop != nil
+      end
+    else
+      @lop = @lop.replace_recursive(orig,replaced)
+      @rop = @rop.replace_recursive(orig,replaced) if @rop != nil
+    end
     self
   end
   def replace_fdpsname_recursive(h=$varhash)

@@ -1014,12 +1014,17 @@ class Kernelprogram
                 tail = get_tail(bs)
                 if related_vars.find(){ |n| n == name } || h[name][0] == "FORCE"
                   tmp_name_hash[name] = add_new_tmpvar(bs.type) if tmp_name_hash[name] == nil
-                  bss.push(Statement.new([name,Merge.new([tmp_name_hash[name],name,bs.type]),bs.type]))
+                  if ["x","y","z","w"].index(tail)
+                    src = Expression.new([:dot,tmp_name_hash[name],tail,bs.type])
+                    dst = Expression.new([:dot,name,tail,bs.type])
+                    bss.push(Statement.new([dst,Merge.new([src,dst,bs.type]),bs.type]))
+                  else
+                    bss.push(Statement.new([name,Merge.new([tmp_name_hash[name],name,bs.type]),bs.type]))
+                  end
                 end
               end
             }
           }
-
           #p tmp_name_hash
           cbb.bodies.each{  |bss|
             computed_list = []
@@ -1030,7 +1035,7 @@ class Kernelprogram
                 bs.replace_name(name,tmp_name_hash[name]) if tmp_name_hash[name] != nil
                 bs.expression.replace_by_list(computed_list,replaced_list)
                 if tmp_name_hash[name] != nil
-                  computed_list.push(name)
+                  computed_list.push(bs.name)
                   replaced_list.push(tmp_name_hash[name])
                 end
               end
@@ -1059,73 +1064,6 @@ class Kernelprogram
     }
     abort "ConditionalBranch is not terminated" if nest_level > 0
     new_s.reverse
-  end
-
-  def make_conditional_branch_block_recursive(ss)
-    #abort "make_conditional_branch_block_recursive"
-    new_s = []
-    nest_level = 0
-    cbb = ConditionalBranch.new([[],[]])
-    computed_vars = []
-
-    ss.each{ |s|
-      if s.class == IfElseState
-        nest_level += 1 if s.operator == :if
-        nest_level -= 1 if s.operator == :endif
-        abort "nest level is less than 0" if nest_level < 0
-      end
-      if nest_level == 0
-        if isStatement(s)
-          computed_vars.push(get_name(s))
-        end
-        if s.class == IfElseState
-          abort "operator #{s.operator} of #{s} must be :endif" if s.operator != :endif
-          new_b = []
-          cbb.bodies.each{ |b|
-            new_b.push(make_conditional_branch_block_recursive(b))
-          }
-          cbb.bodies = new_b
-          new_s.push(cbb)
-          cbb.bodies.each{ |bss|
-            name_list = []
-            replaced_list = []
-            bss.each{ |bs|
-              if isStatement(bs) && bs.expression.class != Merge
-                name = get_name(bs)
-                tail = get_tail(bs)
-                if computed_vars.find(){ |n| n == name }
-                  abort "merging after conditional branch is not supported for vector variable" if bs.type =~  /vec/
-                  tmp_name = name_list.find{ |n| n == name }
-                  tmp_name = add_new_tmpvar(bs.type) if tmp_name == nil
-
-                  bs.replace_name(name,tmp_name)
-                  bs.expression.replace_by_list(name_list,replaced_list)
-                  if !(name_list.find{ |n| n == name })
-                    name_list.push(name)
-                    replaced_list.push(tmp_name)
-                  end
-                  bss.push(Statement.new([name,Merge.new([tmp_name,name,bs.type]),bs.type]))
-                end
-              end
-            }
-          }
-          cbb = ConditionalBranch.new([[],[]])
-        else
-          new_s.push(s)
-        end
-      elsif nest_level == 1
-        if s.class == IfElseState && s.operator != :endif
-          cbb.push_condition(s)
-          #p cbb
-        else
-          cbb.push_body(s)
-        end
-      else
-        cbb.push_body(s)
-      end
-    }
-    abort "ConditionalBranch is not terminated" if nest_level > 0
-    new_s
   end
 end
 

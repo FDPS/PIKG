@@ -91,7 +91,7 @@ def get_tail(x)
   elsif x.class == Statement
     if x.name.class == Expression
       if x.name.operator == :dot
-        ret = x.name.lop
+        ret = x.name.rop
       else
         ret = x.name
       end
@@ -101,7 +101,7 @@ def get_tail(x)
   elsif x.class == String
     ret = nil
   else
-    abort "get_name is not allowed to use for #{x.class}"
+    abort "get_tail is not allowed to use for #{x.class}"
   end
   ret
 end
