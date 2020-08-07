@@ -183,10 +183,25 @@ end
 
 
 def on_error(id,val,stack)
-  lineno = get_lineno(val)
-  line   = get_line(val)
-  warning = "parse error :line #{lineno}: #{line}"
-  for i in 1..warning.index(val)
+  #lineno = get_lineno(val)
+  #line   = get_line(val)
+  line0 = []
+  $used_q.reverse_each{ |v|
+    break if v[1] == :EOL
+    line0.push(v[1])
+  }
+  line0 = "parse error: " + line0.reverse.join('')
+
+  line1 = []
+  @q.each{ |v|
+    break if v[1] == :EOL
+    line1.push(v[1])
+  }
+  line1 = line1.join('')
+
+  #warning = "parse error :line #{lineno}: #{line}"
+  warning = line0 + line1
+  for i in 1..line0.length
     warning += " "
   end
   warning += "^"
