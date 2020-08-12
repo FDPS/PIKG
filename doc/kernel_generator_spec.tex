@@ -47,6 +47,8 @@ Ver 0.0 --- 2020/7/31\\
 0.0版リリース向けに改定
 \subsection{2020/8/7}
 変数宣言部に記述を追加．
+\subsection{2020/8/12}
+条件分岐の文法に間違いがあったので修正．
 
 \section{はじめに}
 %本書はFDPS向けのカーネル関数のソースコードジェネレータの仕様書である．
@@ -185,26 +187,27 @@ PIKGのDSLは以下の3つのパートから構成される．
  \subsubsection{条件分岐}
  条件分岐は以下の文法でおこなえる．
 \begin{verbatim}
-if(条件1){
+if 条件1 
   実行1
-}elif(条件2){
+elsif 条件2
   実行2
-}else{
+else
   実行3
-}
+endif
 \end{verbatim}
-elif以下は省略可能である．
+elsif以下は省略可能である．
+将来的にendifはendでも使えるようになる予定(Rubyの文法に合わせる)．後置などはできない．
 
 例
 \begin{verbatim}
 	dr = ri - rj
 	r2 = dr*dr
-	if(r2 > 0.0 && r2 < 16.0){
+	if r2 > 0.0 && r2 < 16.0
 	  r2i = inv(r2)
 	  r6i = r2i * r2i * r2i
 	  f += 24 * r6i * r2i * (2*r6i - 1) * dr
 	  u += 4 * r6i * (r6i - 1)
-	}
+	endif
 \end{verbatim}
 
  \subsubsection{予約関数}
@@ -235,7 +238,7 @@ elif以下は省略可能である．
 	FORCE F32 fi:f
 	FORCE F32 ui:u
 \end{verbatim}
-これは仕様ではないが，現状"x","y","z"は変数名として使用することができない．
+これは仕様ではないが，現状"x","y","z","w"は変数名として使用することができない．
 
 EPI，EPJもしくはFORCEがつかない場合，カーネル関数オブジェクト初期化時に渡す引数として扱われる．DSL上ではグローバル変数のような扱いになる．
 この場合，コロンによって対応関係を示す必要はない．
