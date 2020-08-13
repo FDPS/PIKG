@@ -1112,6 +1112,14 @@ class String
     end
     ret
   end
+
+  def replace_by_list(name_list,replaced_list)
+    ret = self
+    name_list.zip(replaced_list){ |n,r|
+      ret = r if self == n
+    }
+    ret
+  end
   
   def convert_to_code(conversion_type,h=$varhash)
     s=self
