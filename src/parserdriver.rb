@@ -1027,47 +1027,49 @@ class Kernelprogram
   end
 
   def generate_fortran_module()
+    indent = "   "
     code =  ""
     code += "module #{$module_name}\n"
-    code += "use, intrinsic :: iso_c_binding\n"
+    code += indent + "use, intrinsic :: iso_c_binding\n"
     code += "\n"
-    code += "interface\n"
+    code += indent + "interface\n"
     code += "\n"
-    code += "subroutine #{$interface_name}(epi, ni, epj, nj, force) &\n"
-    code += "      bind(c,name='#{$interface_name}')\n"
-    code += "   use, intrinsic :: iso_c_binding\n"
-    code += "   implicit none\n"
-    code += "   integer(kind=c_int), value :: ni,nj\n"
-    code += "   type(c_ptr), value :: epi, epj, force\n"
-    code += "end subroutine\n"
+    code += indent * 2 + "subroutine #{$interface_name}(epi, ni, epj, nj, force) &\n"
+    code += indent * 4 + "bind(c,name='#{$interface_name}')\n"
+    code += indent * 3 + "use, intrinsic :: iso_c_binding\n"
+    code += indent * 3 + "implicit none\n"
+    code += indent * 3 + "integer(kind=c_int), value :: ni,nj\n"
+    code += indent * 3 + "type(c_ptr), value :: epi, epj, force\n"
+    code += indent * 2 + "end subroutine\n"
     code += "\n"
-    code += "subroutine #{$initializer_name}( &\n"
+    code += indent * 2 + "subroutine #{$initializer_name} &\n"
+    code += indent * 3 + "( &\n"
     count = 0
     $varhash.each{|v|
       iotype = v[1][0]
       if iotype == "MEMBER"
         code += "," if count > 0
         name = v[0]
-        code += " " + name + " & \n"
+        code += indent * 3 + name + " & \n"
         count = count + 1
       end
     }
-    code += ") &\n"
-    code += "      bind(c,name='{#{$initializer_name}}')\n"
-    code += "   use, intrinsic :: iso_c_binding\n"
-    code += "   implicit none\n"
+    code += indent * 3 + ") &\n"
+    code += indent * 4 + "bind(c,name='{#{$initializer_name}}')\n"
+    code += indent * 3 + "use, intrinsic :: iso_c_binding\n"
+    code += indent * 3 + "implicit none\n"
     $varhash.each{|v|
       iotype = v[1][0]
       if iotype == "MEMBER"
         name = v[0]
         type = v[1][1]
-        code += fortran_type(type) + ", value :: " + name + "\n"
+        code += indent * 3 + fortran_type(type) + ", value :: " + name + "\n"
       end
     }
-    code += "end subroutine\n" 
-    code += "end interface\n"
+    code += indent * 2 + "end subroutine\n" 
+    code += indent + "end interface\n"
     code += "end module #{$module_name}\n"
-    module_file_name = "#{$module_name}" + ".F90"
+    $module_file_name = $module_name + ".F90"
     File.open($module_file_name, mode = 'w'){ |f|
       f.write(code)
     }
@@ -1376,15 +1378,7 @@ if $c_interface || $fortran_interface
 
   if $fortran_interface
     if $module_name == nil
-      tmp =  $output_file.split ('.')
-
-      if tmp.length > 1
-        tmp[-1] = "h"
-        $module_name = tmp.join('.')
-      else
-        $module_name = tmp.join
-      end
-      warn "module name: #{$module_name}"
+      abort "error: Fortran module name is not given"
     end
   end
 

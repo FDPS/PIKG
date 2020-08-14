@@ -8,6 +8,7 @@ CCFLAGS += -I../../inc
 
 #PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name Particle --force-name Particle
 PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name Particle --force-name Particle --fortran-interface pikg_kernels
+#PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name Particle --force-name Particle --c-interface pikg_kernels
 
 # AVX2 mode
 #CONVERSION_TYPE=AVX2 
