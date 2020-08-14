@@ -990,7 +990,8 @@ class Kernelprogram
     code += "#ifndef H_PROTOTYPE_DECL_#{$interface_name.capitalize}\n"
     code += "#define H_PROTOTYPE_DECL_#{$interface_name.capitalize}\n"
     code += "#include <pikg_vector.h>\n"
-    code += "void #{$interface_name}(const struct #{$epi_name}*, const int, const struct #{convert_fdps_defined_type($epj_name)}*,const int, struct #{$force_name}*);\n"
+    #code += "void #{$interface_name}(const struct #{$epi_name}*, const int, const struct #{convert_fdps_defined_type($epj_name)}*,const int, struct #{$force_name}*);\n"
+    code += "void #{$interface_name}(void*, const int, void*,const int, void*);\n"
     code += "void #{$initializer_name}("
     count = 0
     $varhash.each{|v|
