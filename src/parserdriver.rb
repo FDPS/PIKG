@@ -1067,7 +1067,7 @@ class Kernelprogram
     code += "end subroutine\n" 
     code += "end interface"
     code += "end module #{$module_name}"
-    module_file_name = module_name + ".F90"
+    module_file_name = "#{$module_name}" + ".F90"
     File.open($module_file_name, mode = 'w'){ |f|
       f.write(code)
     }
@@ -1348,7 +1348,7 @@ while true
     warn "fortran interface mode on\n"
     if !ARGV.empty? && ARGV[0][0] != "-"
       $module_name = ARGV.shift
-      warn "module file name: #{$module_name}"
+      warn "module name: #{$module_name}"
     end
   else
     abort "error: unsupported option #{opt}"
@@ -1382,9 +1382,9 @@ if $c_interface || $fortran_interface
         tmp[-1] = "h"
         $module_name = tmp.join('.')
       else
-        $module_name = tmp.join + ".h"
+        $module_name = tmp.join
       end
-      warn "module file name: #{$module_name}"
+      warn "module name: #{$module_name}"
     end
   end
 
