@@ -1048,7 +1048,7 @@ class Kernelprogram
       if iotype == "MEMBER"
         code += "," if count > 0
         name = v[0]
-        code += " " + name
+        code += " " + name + " & \n"
         count = count + 1
       end
     }
@@ -1061,12 +1061,12 @@ class Kernelprogram
       if iotype == "MEMBER"
         name = v[0]
         type = v[1][1]
-        code += fortran_type(type) + ", value :: " + name
+        code += fortran_type(type) + ", value :: " + name + "\n"
       end
     }
     code += "end subroutine\n" 
-    code += "end interface"
-    code += "end module #{$module_name}"
+    code += "end interface\n"
+    code += "end module #{$module_name}\n"
     module_file_name = "#{$module_name}" + ".F90"
     File.open($module_file_name, mode = 'w'){ |f|
       f.write(code)
