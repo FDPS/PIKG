@@ -6,7 +6,8 @@ PIKG=$(PIKG_ROOT)/bin/pikg
 CONVERSION_TYPE=reference
 CCFLAGS += -I../../inc
 
-PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name Particle --force-name Particle
+#PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name Particle --force-name Particle
+PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name Particle --force-name Particle --fortran-interface pikg_kernels
 
 # AVX2 mode
 #CONVERSION_TYPE=AVX2 

@@ -1009,6 +1009,71 @@ class Kernelprogram
       f.write(code)
     }
   end
+
+
+  def fortran_type(type)
+    case type
+    when "F64"
+      "real(kind=c_double)"
+    when "F32"
+      "real(kind=c_float)"
+    when "S64"
+      "integer(kind=c_long_long)"
+    when "S32"
+      "integer(kind=c_int)"
+    else
+      abort "unsupported fortran type"
+    end
+  end
+
+  def generate_fortran_module()
+    code =  ""
+    code += "module #{$module_name}\n"
+    code += "use, intrinsic :: iso_c_binding\n"
+    code += "\n"
+    code += "interface\n"
+    code += "\n"
+    code += "subroutine #{$interface_name}(epi, ni, epj, nj, force) &\n"
+    code += "      bind(c,name='#{$interface_name}')\n"
+    code += "   use, intrinsic :: iso_c_binding\n"
+    code += "   implicit none\n"
+    code += "   integer(kind=c_int), value :: ni,nj\n"
+    code += "   type(c_ptr), value :: epi, epj, force\n"
+    code += "end subroutine\n"
+    code += "\n"
+    code += "subroutine #{$initializer_name}( &\n"
+    count = 0
+    $varhash.each{|v|
+      iotype = v[1][0]
+      if iotype == "MEMBER"
+        code += "," if count > 0
+        name = v[0]
+        code += " " + name
+        count = count + 1
+      end
+    }
+    code += ") &\n"
+    code += "      bind(c,name='{#{$initializer_name}}')\n"
+    code += "   use, intrinsic :: iso_c_binding\n"
+    code += "   implicit none\n"
+    $varhash.each{|v|
+      iotype = v[1][0]
+      if iotype == "MEMBER"
+        name = v[0]
+        type = v[1][1]
+        code += fortran_type(type) + ", value :: " + name
+      end
+    }
+    code += "end subroutine\n" 
+    code += "end interface"
+    code += "end module #{$module_name}"
+    module_file_name = module_name + ".F90"
+    File.open($module_file_name, mode = 'w'){ |f|
+      f.write(code)
+    }
+  end
+
+
   def make_conditional_branch_block(h = $varhash)
     @statements = make_conditional_branch_block_recursive2(@statements,h)
   end
@@ -1278,25 +1343,49 @@ while true
       $prototype_decl_name = ARGV.shift
       warn "prototype decl file name: #{$prototype_decl_name}"
     end
+  when "--fortran-interface"
+    $fortran_interface = true
+    warn "fortran interface mode on\n"
+    if !ARGV.empty? && ARGV[0][0] != "-"
+      $module_name = ARGV.shift
+      warn "module file name: #{$module_name}"
+    end
   else
     abort "error: unsupported option #{opt}"
   end
 end
 #abort "output file must be specified with --output option" if $output_file == nil
 
-if $c_interface
+if $c_interface || $fortran_interface
   $interface_name = $kernel_name
   $kernel_name = $kernel_name + "_"
-  if $prototype_decl_name == nil
-    tmp =  $output_file.split ('.')
 
-    if tmp.length > 1
-      tmp[-1] = "h"
-      $prototype_decl_name = tmp.join('.')
-    else
-      $prototype_decl_name = tmp.join + ".h"
+  if $c_interface
+    if $prototype_decl_name == nil
+      tmp =  $output_file.split ('.')
+
+      if tmp.length > 1
+        tmp[-1] = "h"
+        $prototype_decl_name = tmp.join('.')
+      else
+        $prototype_decl_name = tmp.join + ".h"
+      end
+      warn "prototype decl file name: #{$prototype_decl_name}"
     end
-    warn "prototype decl file name: #{$prototype_decl_name}"
+  end
+
+  if $fortran_interface
+    if $module_name == nil
+      tmp =  $output_file.split ('.')
+
+      if tmp.length > 1
+        tmp[-1] = "h"
+        $module_name = tmp.join('.')
+      else
+        $module_name = tmp.join + ".h"
+      end
+      warn "module file name: #{$module_name}"
+    end
   end
 
   $initializer_name = $interface_name + "_initialize" if $initializer_name == nil
@@ -1313,6 +1402,7 @@ program.expand_tree
 program.make_conditional_branch_block
 program.disassemble_statement
 program.generate_prototype_decl_file if $c_interface
+program.generate_fortran_module if $fortran_interface
 if $is_multi_walk
   program.generate_optimized_code_multi_walk($conversion_type);
 else
