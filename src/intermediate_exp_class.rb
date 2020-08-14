@@ -748,16 +748,17 @@ class PointerOf
     when /F32/
       "float*"
     when /S64/
-    #"long long int*"
-      "int64_t*"
+      "long long int*"
+      #"int64_t*"
     when /S32/
-      "int32_t*"
+      "int*"
+      #"int32_t*"
     when /U64/
-    #"unsigned long long int*"
-      "uint64_t*"
+      "unsigned long long int*"
+      #"uint64_t*"
     when /U32/
-      #"unsigned int*"
-      "uint32_t*"
+      "unsigned int*"
+      #"uint32_t*"
     end
   end
 
