@@ -1055,7 +1055,7 @@ class Kernelprogram
       end
     }
     code += indent * 3 + ") &\n"
-    code += indent * 4 + "bind(c,name='{#{$initializer_name}}')\n"
+    code += indent * 4 + "bind(c,name='#{$initializer_name}')\n"
     code += indent * 3 + "use, intrinsic :: iso_c_binding\n"
     code += indent * 3 + "implicit none\n"
     $varhash.each{|v|
@@ -1066,8 +1066,8 @@ class Kernelprogram
         code += indent * 3 + fortran_type(type) + ", value :: " + name + "\n"
       end
     }
-    code += indent * 2 + "end subroutine\n" 
-    code += indent + "end interface\n"
+    code += indent * 2 + "end subroutine\n\n" 
+    code += indent + "end interface\n\n"
     code += "end module #{$module_name}\n"
     $module_file_name = $module_name + ".F90"
     File.open($module_file_name, mode = 'w'){ |f|
