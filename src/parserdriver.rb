@@ -367,7 +367,7 @@ class Kernelprogram
         code += "PIKG::" + type + " " + name + ";\n"
       end
     }
-   
+    code += "#{$kernel_name}(){}\n"
     code += "#{$kernel_name}("
     member_count = 0
     $varhash.each{|v|
@@ -393,7 +393,34 @@ class Kernelprogram
       end
     }
     code += "{}\n"
-    code += "void operator()(const #{$epi_name}* __restrict__ epi,const int ni,const #{$epj_name}* __restrict__ epj,const int nj,#{$force_name}* __restrict__ force){\n"
+
+    code += "void initialize("
+    count = 0
+    $varhash.each{|v|
+      iotype = v[1][0]
+      if iotype == "MEMBER"
+        code += "," if count > 0
+        name = v[0]
+        type = v[1][1]
+        code += "PIKG::" + type + " " + name +"_"
+        count = count + 1
+      end
+    }
+    code += "){\n"
+
+    count = 0
+    $varhash.each{|v|
+      iotype = v[1][0]
+      if iotype == "MEMBER"
+        name = v[0]
+        code += name + " = " + name + "_;\n"
+        count = count + 1
+      end
+    }
+    code += "}\n"
+    
+    code += "void operator()"
+    code += "(const #{$epi_name}* __restrict__ epi,const int ni,const #{$epj_name}* __restrict__ epj,const int nj,#{$force_name}* __restrict__ force){\n"
     if conversion_type =~ /(A64FX|AVX)/
       $pg_count = 0
       $current_predicate = "pg#{$pg_count}"
@@ -825,6 +852,8 @@ class Kernelprogram
   end
   def generate_optimized_code(conversion_type,output=$output_file)
     code = "#include<pikg_vector.hpp>\n"
+    code += $additional_text if $additional_text != nil
+    code += "\n"
     case conversion_type
     when /A64FX/
       code += "#include <arm_sve.h>\n"
@@ -946,12 +975,52 @@ class Kernelprogram
       
       code += "#endif\n"
     end
-    #code += "#include \"user_defined_class.h\"\n"
+
     code += kernel_class_def(conversion_type)
     code += kernel_body(conversion_type)
     code += "}\n"
     code += reserved_func_def(conversion_type)
-    code += "};\n"
+    code += "}; // kernel functor definition\n"
+
+
+    if $c_interface
+      code += "#{$kernel_name} __pikg_#{$interface_name};\n"
+
+      code += "extern \"C\"{\n"
+      code += "void #{$initializer_name}("
+      count = 0
+      $varhash.each{|v|
+        iotype = v[1][0]
+        if iotype == "MEMBER"
+          code += "," if count > 0
+          name = v[0]
+          type = v[1][1]
+          code += "PIKG::" + type + " " + name +"_"
+          count = count + 1
+        end
+      }
+      code += "){\n"
+      code += "__pikg_#{$interface_name}.initialize("
+      count = 0
+      $varhash.each{|v|
+        iotype = v[1][0]
+        if iotype == "MEMBER"
+          code += "," if count > 0
+          name = v[0]
+          type = v[1][1]
+          code += name +"_"
+          count = count + 1
+        end
+      }
+      code += ");\n"
+      code += "} // intialize_#{$interface_name}\n"
+
+      code += "void #{$interface_name}(const #{$epi_name}* epi, const PIKG::S32 ni, const #{$epj_name}* epj,const PIKG::S32 nj, #{$force_name}* force){\n"
+      code += "__pikg_#{$interface_name}(epi,ni,epj,nj,force);\n"
+      code += "}\n"
+      code += "} // extern \"C\"\n"
+    end
+
 
     if output == nil
       print code
@@ -962,6 +1031,29 @@ class Kernelprogram
     end
   end
 
+  def generate_prototype_decl_file()
+    code =  ""
+    code += "#ifndef H_PROTOTYPE_DECL_#{$interface_name.capitalize}\n"
+    code += "#define H_PROTOTYPE_DECL_#{$interface_name.capitalize}\n"
+    code += "void #{$interface_name}(const #{$epi_name}*, const PIKG::S32, const #{$epj_name}*,const PIKG::S32, #{$force_name}*);\n"
+    code += "void #{$initializer_name}("
+    count = 0
+    $varhash.each{|v|
+      iotype = v[1][0]
+      if iotype == "MEMBER"
+        code += "," if count > 0
+        name = v[0]
+        type = v[1][1]
+        code += "PIKG::" + type + " " + name +"_"
+        count = count + 1
+      end
+    }
+    code += ");\n"
+    code += "#endif\n"
+    File.open($prototype_decl_name, mode = 'w'){ |f|
+      f.write(code)
+    }
+  end
   def make_conditional_branch_block(h = $varhash)
     @statements = make_conditional_branch_block_recursive2(@statements,h)
   end
@@ -1215,14 +1307,45 @@ while true
   when "--output"
     $output_file = ARGV.shift
     warn "output file name: #{$output_file}\n"
+  when "--initializer-name"
+    $initializer_name = ARGV.shift
+    warn "kernel initializer name: #{$initializer_name}"
+  when "--additional-text"
+     $additional_text = ARGV.shift
+    warn "additional text: #{$additional_text}"
   when "--multiwalk"
     $is_multi_walk = true
     warn "multi walk mode\n"
+  when "--c-interface"
+    $c_interface = true
+    warn "c interface mode on\n"
+    if !ARGV.empty? && ARGV[0][0] != "-"
+      $prototype_decl_name = ARGV.shift
+      warn "prototype decl file name: #{$prototype_decl_name}"
+    end
   else
     abort "error: unsupported option #{opt}"
   end
 end
 #abort "output file must be specified with --output option" if $output_file == nil
+
+if $c_interface
+  $interface_name = $kernel_name
+  $kernel_name = $kernel_name + "_"
+  if $prototype_decl_name == nil
+    tmp =  $output_file.split ('.')
+
+    if tmp.length > 1
+      tmp[-1] = "h"
+      $prototype_decl_name = tmp.join('.')
+    else
+      $prototype_decl_name = tmp.join + ".h"
+    end
+    warn "prototype decl file name: #{$prototype_decl_name}"
+  end
+
+  $initializer_name = $interface_name + "_initialize" if $initializer_name == nil
+end
 
 src = ""
 program=parser.parse(filename)
@@ -1234,6 +1357,7 @@ program.expand_function
 program.expand_tree
 program.make_conditional_branch_block
 program.disassemble_statement
+program.generate_prototype_decl_file if $c_interface
 if $is_multi_walk
   program.generate_optimized_code_multi_walk($conversion_type);
 else
