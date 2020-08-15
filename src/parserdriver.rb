@@ -874,7 +874,7 @@ class Kernelprogram
     code += "}; // kernel functor definition\n"
 
 
-    if $c_interface
+    if $c_interface_impl
       code += "#{$kernel_name} __pikg_#{$interface_name};\n"
 
       code += "extern \"C\"{\n"
@@ -1010,6 +1010,83 @@ class Kernelprogram
       f.write(code)
     }
   end
+
+  def fortran_type(type)
+    case type
+    when "F64"
+      "real(kind=c_double)"
+    when "F32"
+      "real(kind=c_float)"
+    when "S64"
+      "integer(kind=c_long_long)"
+    when "S32"
+      "integer(kind=c_int)"
+    when "F64vec"
+      "pikg_f64vec3"
+    when "F64vec2"
+      "pikg_f64vec2"
+    when "F64vec3"
+      "pikg_f64vec3"
+    when "F32vec"
+      "pikg_f32vec3"
+    when "F32vec2"
+      "pikg_f32vec2"
+    when "F32vec3"
+      "pikg_f32vec3"
+    else
+      abort "unsupported fortran type"
+    end
+  end
+
+  def generate_fortran_module()
+    indent = "   "
+    code =  ""
+    code += "module #{$module_name}\n"
+    code += indent + "use, intrinsic :: iso_c_binding\n"
+    code += "\n"
+    code += indent + "interface\n"
+    code += "\n"
+    code += indent * 2 + "subroutine #{$interface_name}(epi, ni, epj, nj, force) &\n"
+    code += indent * 4 + "bind(c,name='#{$interface_name}')\n"
+    code += indent * 3 + "use, intrinsic :: iso_c_binding\n"
+    code += indent * 3 + "implicit none\n"
+    code += indent * 3 + "integer(kind=c_int), value :: ni,nj\n"
+    code += indent * 3 + "type(c_ptr), value :: epi, epj, force\n"
+    code += indent * 2 + "end subroutine\n"
+    code += "\n"
+    code += indent * 2 + "subroutine #{$initializer_name} &\n"
+    code += indent * 3 + "( &\n"
+    count = 0
+    $varhash.each{|v|
+      iotype = v[1][0]
+      if iotype == "MEMBER"
+        code += "," if count > 0
+        name = v[0]
+        code += indent * 3 + name + " & \n"
+        count = count + 1
+      end
+    }
+    code += indent * 3 + ") &\n"
+    code += indent * 4 + "bind(c,name='#{$initializer_name}')\n"
+    code += indent * 3 + "use, intrinsic :: iso_c_binding\n"
+    code += indent * 3 + "implicit none\n"
+    $varhash.each{|v|
+      iotype = v[1][0]
+      if iotype == "MEMBER"
+        name = v[0]
+        type = v[1][1]
+        code += indent * 3 + fortran_type(type) + ", value :: " + name + "\n"
+      end
+    }
+    code += indent * 2 + "end subroutine\n\n" 
+    code += indent + "end interface\n\n"
+    code += "end module #{$module_name}\n"
+    $module_file_name = $module_name + ".F90"
+    File.open($module_file_name, mode = 'w'){ |f|
+      f.write(code)
+    }
+  end
+
   def make_conditional_branch_block(h = $varhash)
     @statements = make_conditional_branch_block_recursive2(@statements,h)
   end
@@ -1279,6 +1356,13 @@ while true
       $prototype_decl_name = ARGV.shift
       warn "prototype decl file name: #{$prototype_decl_name}"
     end
+  when "--fortran-interface"
+    $fortran_interface = true
+    warn "fortran interface mode on\n"
+    if !ARGV.empty? && ARGV[0][0] != "-"
+      $module_name = ARGV.shift
+      warn "module name: #{$module_name}"
+    end
   else
     abort "error: unsupported option #{opt}"
   end
@@ -1286,8 +1370,21 @@ end
 #abort "output file must be specified with --output option" if $output_file == nil
 
 if $c_interface
+  $c_interface_impl = true
+  $c_interface_decl = true
+end
+if $fortran_interface
+  $c_interface_impl = true
+  $c_interface_decl = false
+end
+
+if $c_interface_impl || $c_interface_decl
   $interface_name = $kernel_name
   $kernel_name = $kernel_name + "_"
+  $initializer_name = $interface_name + "_initialize" if $initializer_name == nil
+end
+
+if $c_interface_decl
   if $prototype_decl_name == nil
     tmp =  $output_file.split ('.')
 
@@ -1299,8 +1396,6 @@ if $c_interface
     end
     warn "prototype decl file name: #{$prototype_decl_name}"
   end
-
-  $initializer_name = $interface_name + "_initialize" if $initializer_name == nil
 end
 
 src = ""
@@ -1313,7 +1408,8 @@ program.expand_function
 program.expand_tree
 program.make_conditional_branch_block
 program.disassemble_statement
-program.generate_prototype_decl_file if $c_interface
+program.generate_prototype_decl_file if $c_interface_decl
+program.generate_fortran_module if $fortran_interface
 if $is_multi_walk
   program.generate_optimized_code_multi_walk($conversion_type);
 else
