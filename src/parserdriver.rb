@@ -1021,6 +1021,18 @@ class Kernelprogram
       "integer(kind=c_long_long)"
     when "S32"
       "integer(kind=c_int)"
+    when "F64vec"
+      "pikg_f64vec3"
+    when "F64vec2"
+      "pikg_f64vec2"
+    when "F64vec3"
+      "pikg_f64vec3"
+    when "F32vec"
+      "pikg_f32vec3"
+    when "F32vec2"
+      "pikg_f32vec2"
+    when "F32vec3"
+      "pikg_f32vec3"
     else
       abort "unsupported fortran type"
     end
