@@ -874,7 +874,7 @@ class Kernelprogram
     code += "}; // kernel functor definition\n"
 
 
-    if $c_interface
+    if $c_interface_impl
       code += "#{$kernel_name} __pikg_#{$interface_name};\n"
 
       code += "extern \"C\"{\n"
@@ -1370,36 +1370,35 @@ while true
 end
 #abort "output file must be specified with --output option" if $output_file == nil
 
+if $c_interface
+  $c_interface_impl = true
+  $c_interface_decl = true
+end
 if $fortran_interface
-  $c_interface = true
+  $c_interface_impl = true
+  $c_interface_decl = false
 end
 
-if $c_interface
+if $c_interface_impl || $c_interface_decl
   $interface_name = $kernel_name
   $kernel_name = $kernel_name + "_"
-
-  if $c_interface
-    if $prototype_decl_name == nil
-      tmp =  $output_file.split ('.')
-
-      if tmp.length > 1
-        tmp[-1] = "h"
-        $prototype_decl_name = tmp.join('.')
-      else
-        $prototype_decl_name = tmp.join + ".h"
-      end
-      warn "prototype decl file name: #{$prototype_decl_name}"
-    end
-  end
-
-  if $fortran_interface
-    if $module_name == nil
-      abort "error: Fortran module name is not given"
-    end
-  end
-
   $initializer_name = $interface_name + "_initialize" if $initializer_name == nil
 end
+
+if $c_interface_decl
+  if $prototype_decl_name == nil
+    tmp =  $output_file.split ('.')
+
+    if tmp.length > 1
+      tmp[-1] = "h"
+      $prototype_decl_name = tmp.join('.')
+    else
+      $prototype_decl_name = tmp.join + ".h"
+    end
+    warn "prototype decl file name: #{$prototype_decl_name}"
+  end
+end
+
 
 src = ""
 program=parser.parse(filename)
@@ -1411,7 +1410,7 @@ program.expand_function
 program.expand_tree
 program.make_conditional_branch_block
 program.disassemble_statement
-program.generate_prototype_decl_file if $c_interface
+program.generate_prototype_decl_file if $c_interface_decl
 program.generate_fortran_module if $fortran_interface
 if $is_multi_walk
   program.generate_optimized_code_multi_walk($conversion_type);
