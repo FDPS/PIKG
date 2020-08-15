@@ -886,11 +886,7 @@ class Kernelprogram
           code += "," if count > 0
           name = v[0]
           type = v[1][1]
-          if $fortran_interface
-            code += "const " + c_interface_type_decl(type) + " " + name + "_"
-          else
-            code += "const PIKG::" + type + " " + name +"_"
-          end
+          code += "const PIKG::" + type + " " + name +"_"
           count = count + 1
         end
       }
@@ -910,11 +906,7 @@ class Kernelprogram
       code += ");\n"
       code += "} // intialize_#{$interface_name}\n"
 
-      if $fortran_interface
-        code += "void #{$interface_name}(const void* epi, const int ni, const void* epj, const int nj, void* force){\n"
-      else
-        code += "void #{$interface_name}(const #{$epi_name}* epi, const PIKG::S32 ni, const #{$epj_name}* epj,const PIKG::S32 nj, #{$force_name}* force){\n"
-      end
+      code += "void #{$interface_name}(const #{$epi_name}* epi, const PIKG::S32 ni, const #{$epj_name}* epj,const PIKG::S32 nj, #{$force_name}* force){\n"
       code += "__pikg_#{$interface_name}(epi,ni,epj,nj,force);\n"
       code += "}\n"
       code += "} // extern \"C\"\n"
