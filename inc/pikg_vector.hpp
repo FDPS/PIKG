@@ -5,6 +5,8 @@
 #include <particle_simulator.hpp>
 namespace PIKG = ParticleSimulator;
 
+namespace ParticleSimulator{
+
 #else
 
 #include <iostream>
@@ -313,6 +315,7 @@ namespace PIKG{
   using F32vec2 = Vector2<F32>;
   //using F16vec2 = Vector2<float16_t>;
 
+#endif
 
   template<class T>
   class Vector4{
@@ -460,5 +463,4 @@ namespace PIKG{
   //using F16vec = Vector4<F16>;
 };
 
-#endif
 #endif
