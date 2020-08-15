@@ -7,7 +7,7 @@ CONVERSION_TYPE=reference
 CCFLAGS += -I../../inc
 
 #PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name Particle --force-name Particle
-PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name Particle --force-name Particle --fortran-interface pikg_kernels
+PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name Particle --force-name Particle --fortran-interface pikg_module
 #PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name Particle --force-name Particle --c-interface pikg_kernels
 
 # AVX2 mode
@@ -23,6 +23,10 @@ PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name
 #CCFLAGS += -Kfast
 
 all:	nbody.out
+
+kernel.cpp: kernel.pikg # To test Fortran i/f
+	$(PIKG) $(PIKG_OPTION) --output $@ -i $<
+
 kernel.hpp:	kernel.pikg
 	$(PIKG) $(PIKG_OPTION) --output $@ -i $<
 nbody.out:	nbody.cpp kernel.hpp Makefile
