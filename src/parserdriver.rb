@@ -886,7 +886,11 @@ class Kernelprogram
           code += "," if count > 0
           name = v[0]
           type = v[1][1]
-          code += "PIKG::" + type + " " + name +"_"
+          if $fortran_interface
+            code += "const " + c_interface_type_decl(type) + " " + name + "_"
+          else
+            code += "const PIKG::" + type + " " + name +"_"
+          end
           count = count + 1
         end
       }
@@ -906,7 +910,11 @@ class Kernelprogram
       code += ");\n"
       code += "} // intialize_#{$interface_name}\n"
 
-      code += "void #{$interface_name}(const #{$epi_name}* epi, const PIKG::S32 ni, const #{$epj_name}* epj,const PIKG::S32 nj, #{$force_name}* force){\n"
+      if $fortran_interface
+        code += "void #{$interface_name}(const void* epi, const int ni, const void* epj, const int nj, void* force){\n"
+      else
+        code += "void #{$interface_name}(const #{$epi_name}* epi, const PIKG::S32 ni, const #{$epj_name}* epj,const PIKG::S32 nj, #{$force_name}* force){\n"
+      end
       code += "__pikg_#{$interface_name}(epi,ni,epj,nj,force);\n"
       code += "}\n"
       code += "} // extern \"C\"\n"
@@ -1370,7 +1378,11 @@ while true
 end
 #abort "output file must be specified with --output option" if $output_file == nil
 
-if $c_interface || $fortran_interface
+if $fortran_interface
+  $c_interface = true
+end
+
+if $c_interface
   $interface_name = $kernel_name
   $kernel_name = $kernel_name + "_"
 
