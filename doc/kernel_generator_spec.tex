@@ -18,7 +18,7 @@
 %\parskip 5 pt
 \title{PIKG仕様書\\
 {\large 
-Ver 0.0 --- 2020/7/31\\
+Ver 0.1 --- 2020/8/16\\
 }
 }
 \author{野村昴太郎}
@@ -51,6 +51,8 @@ Ver 0.0 --- 2020/7/31\\
 条件分岐の文法に間違いがあったので修正．
 \subsection{2020/8/14}
 C-interfaceの記述を追加．
+\subsection{2020/8/16}
+Fortran-interfaceの記述を追加．
 
 \section{はじめに}
 %本書はFDPS向けのカーネル関数のソースコードジェネレータの仕様書である．
@@ -300,6 +302,11 @@ EPI，EPJ，FORCEの変数宣言はC++のクラスの宣言と型やメンバ変
   \item 相互作用関数をDSLで記述
   \item オプションを指定してカーネルジェネレータにDSLファイルを入力として渡す
  \end{itemize}
+ カーネルジェネレータの実行方法は以下．\$(PIKG)はPIKGをgit cloneしてきたディレクトリである．
+\begin{verbatim}
+$(PIKG)/bin/pikg [options]
+\end{verbatim}
+
  指定可能なオプションは以下の通りである．
   \begin{itemize}
    \item $--$input $|$ $-$i ファイル名 (入力ファイル名の指定)
@@ -339,8 +346,9 @@ EPI，EPJ，FORCEの変数宣言はC++のクラスの宣言と型やメンバ変
 	  EPI *epi = new EPI[nepi];
 	  EPJ *epj = new EPJ[nepj];
 	  FORCE *force = new FORCE[nepi];
+	  Kernel kernel; // ファクタのインスタンス化
 	  (epiやepjに粒子の情報を代入)
-	  Kernel(epi,nepi,epj,nepj,force); // カーネル呼び出し
+	  kernel(epi,nepi,epj,nepj,force); // カーネル呼び出し
 	  (後略)
 	}
 \end{verbatim}
@@ -354,11 +362,17 @@ Cインターフェースオプションを提供する．
 --c-interfaceオプションを有効化すると，生成されたコードの中でファンクタの実体を作り，
 --kernel-nameで指定した名前の関数からファンクタを呼び出す関数が生成される．
 また，各関数のプロトタイプ宣言も別ファイルに生成される(ファイル名の指定などは--c-interfaceオプションを参照)．
-C言語やその他の言語で書かれたコードからは--kernel-nameで指定した関数を適切な引数をつけて呼び出せば，相互作用計算が行われる．
+C言語やその他の言語で書かれたコードからは--kernel-nameで指定した関数に適切な引数をつけて呼び出せば，相互作用計算が行われる．
 
 生成されたコードが単独のファイルとしてコンパイルされるためにはEPI/EPJ/FORCEクラスもしくは構造体の実体をインクルードされる必要がある．PIKGからはその実体がどのヘッダーファイルにかかれているのかを把握するすべがないため，--additional-textオプションをもちいて適切にファイルをインクルードする必要がある．詳しくは--additional-textオプションを参考のこと．
 
 また，EPI/EPJ/FORCE以外の変数を宣言している場合は，ファンクタのメンバ変数を初期化する必要があるのでこれを行う関数も提供される．
 詳しくは--initializer-nameオプションを参照のこと．
 
+\subsection{Fortranインターフェース}
+PIKGではCインターフェースと同様にFortranインターフェースを提供する．
+FortranインターフェースではCインターフェースの機能に加えて，Fortranで利用するmoduleを含むFortranソースを生成する必要がある．module名は--fortran-interfaceに続けてmodule名を指定する．
+ユーザコードからは，このmoduleを利用して--kernel-nameで指定した関数に適切な引数をつけて呼び出すことで相互作用計算が行われる．PIKGで定義されているベクトル型を利用する場合は，src/fortran\_interface/modules/pikg\_vector.F90に定義されているpikg\_vectorを利用する必要がある．
+
+Fortranインターフェースを使う際の注意点として，Fortranには符号なし整数が無いため，EPI，EPJ，FORCE型のメンバ変数としてU(16$|$32$|$64)は使えない．
 \end{document}
