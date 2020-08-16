@@ -1359,10 +1359,8 @@ while true
   when "--fortran-interface"
     $fortran_interface = true
     warn "fortran interface mode on\n"
-    if !ARGV.empty? && ARGV[0][0] != "-"
-      $module_name = ARGV.shift
-      warn "module name: #{$module_name}"
-    end
+    $module_name = ARGV.shift
+    warn "module name: #{$module_name}"
   when "--version"
     warn "pikg version 0.1"
     abort
