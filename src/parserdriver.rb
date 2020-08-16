@@ -367,33 +367,64 @@ class Kernelprogram
         code += "PIKG::" + type + " " + name + ";\n"
       end
     }
-   
-    code += "#{$kernel_name}("
+    code += "#{$kernel_name}(){}\n"
+    includeMemberVar = false
+    tmp = "#{$kernel_name}("
     member_count = 0
     $varhash.each{|v|
       iotype = v[1][0]
       if iotype == "MEMBER"
         name = v[0]
         type = v[1][1]
-        code += "," if member_count > 0
-        code += "PIKG::" + type + " " + name
+        tmp += "," if member_count > 0
+        tmp += "PIKG::" + type + " " + name
         member_count = member_count+1
+        includeMemberVar = true
       end
     }
-    code += ")"
+    tmp += ")"
+
     member_count = 0
     $varhash.each{|v|
       iotype = v[1][0]
       if iotype == "MEMBER"
         name = v[0]
-        code += ":" if member_count == 0
-        code += "," if member_count > 0
-        code += name + "(" + name +")"
+        tmp += ":" if member_count == 0
+        tmp += "," if member_count > 0
+        tmp += name + "(" + name +")"
         member_count = member_count+1
       end
     }
-    code += "{}\n"
-    code += "void operator()(const #{$epi_name}* __restrict__ epi,const int ni,const #{$epj_name}* __restrict__ epj,const int nj,#{$force_name}* __restrict__ force){\n"
+    tmp += "{}\n"
+    code += tmp if includeMemberVar
+
+    code += "void initialize("
+    count = 0
+    $varhash.each{|v|
+      iotype = v[1][0]
+      if iotype == "MEMBER"
+        code += "," if count > 0
+        name = v[0]
+        type = v[1][1]
+        code += "PIKG::" + type + " " + name +"_"
+        count = count + 1
+      end
+    }
+    code += "){\n"
+
+    count = 0
+    $varhash.each{|v|
+      iotype = v[1][0]
+      if iotype == "MEMBER"
+        name = v[0]
+        code += name + " = " + name + "_;\n"
+        count = count + 1
+      end
+    }
+    code += "}\n"
+    
+    code += "void operator()"
+    code += "(const #{$epi_name}* __restrict__ epi,const int ni,const #{$epj_name}* __restrict__ epj,const int nj,#{$force_name}* __restrict__ force){\n"
     if conversion_type =~ /(A64FX|AVX)/
       $pg_count = 0
       $current_predicate = "pg#{$pg_count}"
@@ -825,133 +856,62 @@ class Kernelprogram
   end
   def generate_optimized_code(conversion_type,output=$output_file)
     code = "#include<pikg_vector.hpp>\n"
+    code += $additional_text if $additional_text != nil
+    code += "\n"
     case conversion_type
     when /A64FX/
       code += "#include <arm_sve.h>\n"
     when /AVX2/
-      code += "#ifndef H_PIKG_AVX2\n"
-      code += "#define H_PIKG_AVX2\n"
-      code += "#include <immintrin.h>\n"
-      code += "struct __m256dx2{\n"
-      code += "  __m256d v0,v1;\n"
-      code += "};\n"
-      code += "struct __m256dx3{\n"
-      code += "  __m256d v0,v1,v2;\n"
-      code += "};\n"
-      code += "struct __m256dx4{\n"
-      code += "  __m256d v0,v1,v2,v3;\n"
-      code += "};\n"
-      code += "struct __m256x2{\n"
-      code += "  __m256 v0,v1;\n"
-      code += "};\n"
-      code += "struct __m256x3{\n"
-      code += "  __m256 v0,v1,v2;\n"
-      code += "};\n"
-      code += "struct __m256x4{\n"
-      code += "  __m256 v0,v1,v2,v3;\n"
-      code += "};\n"
-
-      code += "__m256dx2 _mm256_set1_pdx2(const PIKG::F64vec2 v){\n"
-      code += "  __m256dx2 ret;\n"
-      code += "  ret.v0 = _mm256_set1_pd(v.x);\n"
-      code += "  ret.v1 = _mm256_set1_pd(v.y);\n"
-      code += "  return ret;\n"
-      code += "}\n"
-      code += "__m256x2  _mm256_set1_psx2(const PIKG::F32vec2 v){\n"
-      code += "  __m256x2 ret;\n"
-      code += "  ret.v0 = _mm256_set1_ps(v.x);\n"
-      code += "  ret.v1 = _mm256_set1_ps(v.y);\n"
-      code += "  return ret;\n"
-      code += "}\n"
-      code += "__m256dx3 _mm256_set1_pdx3(const PIKG::F64vec v){\n"
-      code += "  __m256dx3 ret;\n"
-      code += "  ret.v0 = _mm256_set1_pd(v.x);\n"
-      code += "  ret.v1 = _mm256_set1_pd(v.y);\n"
-      code += "  ret.v2 = _mm256_set1_pd(v.z);\n"
-      code += "  return ret;\n"
-      code += "}\n"
-      code += "__m256x3  _mm256_set1_psx3(const PIKG::F32vec v){\n"
-      code += "  __m256x3 ret;\n"
-      code += "  ret.v0 = _mm256_set1_ps(v.x);\n"
-      code += "  ret.v1 = _mm256_set1_ps(v.y);\n"
-      code += "  ret.v2 = _mm256_set1_ps(v.z);\n"
-      code += "  return ret;\n"
-      code += "}\n"
-      #code += "__m256dx4 _mm256_set1_pdx3(const PIKG::F64vec4& v){\n"
-      #code += "  __m256dx4 ret;\n"
-      #code += "  ret.v0 = _mm256_set1_pd(v.x);\n"
-      #code += "  ret.v1 = _mm256_set1_pd(v.y);\n"
-      #code += "  ret.v2 = _mm256_set1_pd(v.z);\n"
-      #code += "  ret.v3 = _mm256_set1_pd(v.w);\n"
-      #code += "  return ret;\n"
-      #code += "}\n"
-      #code += "__m256x4  _mm256_set1_psx3(const PIKG::F32vec4& v){\n"
-      #code += "  __m256x4 ret;\n"
-      #code += "  ret.v0 = _mm256_set1_ps(v.x);\n"
-      #code += "  ret.v1 = _mm256_set1_ps(v.y);\n"
-      #code += "  ret.v2 = _mm256_set1_ps(v.z);\n"
-      #code += "  ret.v3 = _mm256_set1_ps(v.w);\n"
-      #code += "  return ret;\n"
-      #code += "}\n"
-      code += "#endif\n"
+      code += "#include <pikg_avx2.hpp>\n"
     when /AVX-512/
-      code += "#ifndef H_PIKG_AVX_512\n"
-      code += "#define H_PIKG_AVX_512\n"
-      code += "#include <immintrin.h>\n"
-      code += "struct __m512dx2{\n"
-      code += "  __m512d v0,v1;\n"
-      code += "};\n"
-      code += "struct __m512dx3{\n"
-      code += "  __m512d v0,v1,v2;\n"
-      code += "};\n"
-      code += "struct __m512dx4{\n"
-      code += "  __m512d v0,v1,v2,v3;\n"
-      code += "};\n"
-      code += "struct __m512x2{\n"
-      code += "  __m512 v0,v1;\n"
-      code += "};\n"
-      code += "struct __m512x3{\n"
-      code += "  __m512 v0,v1,v2;\n"
-      code += "};\n"
-      code += "struct __m512x4{\n"
-      code += "  __m512 v0,v1,v2,v3;\n"
-      code += "};\n"
-
-      code += "__m512dx2 _mm512_set1_pdx2(const PIKG::F64vec2 v){\n"
-      code += "  __m512dx2 ret;\n"
-      code += "  ret.v0 = _mm512_set1_pd(v.x);\n"
-      code += "  ret.v1 = _mm512_set1_pd(v.y);\n"
-      code += "  return ret;\n"
-      code += "}\n"
-      code += "__m512x2  _mm512_set1_psx2(const PIKG::F32vec2 v){\n"
-      code += "  __m512x2 ret;\n"
-      code += "  ret.v0 = _mm512_set1_ps(v.x);\n"
-      code += "  ret.v1 = _mm512_set1_ps(v.y);\n"
-      code += "  return ret;\n"
-      code += "}\n"
-      code += "__m512dx3 _mm512_set1_pdx3(const PIKG::F64vec v){\n"
-      code += "  __m512dx3 ret;\n"
-      code += "  ret.v0 = _mm512_set1_pd(v.x);\n"
-      code += "  ret.v1 = _mm512_set1_pd(v.y);\n"
-      code += "  ret.v2 = _mm512_set1_pd(v.z);\n"
-      code += "  return ret;\n"
-      code += "}\n"
-      code += "__m512x3  _mm512_set1_psx3(const PIKG::F32vec v){\n"
-      code += "  __m512x3 ret;\n"
-      code += "  ret.v0 = _mm512_set1_ps(v.x);\n"
-      code += "  ret.v1 = _mm512_set1_ps(v.y);\n"
-      code += "  ret.v2 = _mm512_set1_ps(v.z);\n"
-      code += "  return ret;\n"
-      code += "}\n"
-      
-      code += "#endif\n"
+      code += "#include <pikg_avx512.hpp>\n"
     end
-    #code += "#include \"user_defined_class.h\"\n"
+
     code += kernel_class_def(conversion_type)
     code += kernel_body(conversion_type)
     code += "}\n"
     code += reserved_func_def(conversion_type)
-    code += "};\n"
+    code += "}; // kernel functor definition\n"
+
+
+    if $c_interface_impl
+      code += "#{$kernel_name} __pikg_#{$interface_name};\n"
+
+      code += "extern \"C\"{\n"
+      code += "void #{$initializer_name}("
+      count = 0
+      $varhash.each{|v|
+        iotype = v[1][0]
+        if iotype == "MEMBER"
+          code += "," if count > 0
+          name = v[0]
+          type = v[1][1]
+          code += "PIKG::" + type + " " + name +"_"
+          count = count + 1
+        end
+      }
+      code += "){\n"
+      code += "__pikg_#{$interface_name}.initialize("
+      count = 0
+      $varhash.each{|v|
+        iotype = v[1][0]
+        if iotype == "MEMBER"
+          code += "," if count > 0
+          name = v[0]
+          type = v[1][1]
+          code += name +"_"
+          count = count + 1
+        end
+      }
+      code += ");\n"
+      code += "} // intialize_#{$interface_name}\n"
+
+      code += "void #{$interface_name}(const #{$epi_name}* epi, const PIKG::S32 ni, const #{$epj_name}* epj,const PIKG::S32 nj, #{$force_name}* force){\n"
+      code += "__pikg_#{$interface_name}(epi,ni,epj,nj,force);\n"
+      code += "}\n"
+      code += "} // extern \"C\"\n"
+    end
+
 
     if output == nil
       print code
@@ -960,6 +920,171 @@ class Kernelprogram
         f.write(code)
       }
     end
+  end
+
+
+  def c_interface_type_decl(type)
+    case type
+    when "F64"
+      "double"
+    when "F32"
+      "float"
+    when "S64"
+      "long long int "
+    when "S32"
+      "int"
+    when "U64"
+      "unsigned long long int"
+    when "U32"
+      "unsigned int"
+    when "F64vec"
+      "pikg_f64vec"
+    when "F64vec2"
+      "pikg_f64vec2"
+    when "F64vec3"
+      "pikg_f64vec3"
+    when "F64vec4"
+      "pikg_f64vec4"
+    when "F32vec"
+      "pikg_f32vec"
+    when "F32vec2"
+      "pikg_f32vec2"
+    when "F32vec3"
+      "pikg_f32vec3"
+    when "F32vec4"
+      "pikg_f32vec4"
+    else
+      abort "unsupported type for c_interface_type_decl"
+    end
+  end
+
+  def convert_fdps_defined_type(name)
+    case name
+    when "PS::SPJMonopole"
+      "fdps_spj_monopole"
+    when "PS::SPJQuadrupole"
+      "fdps_spj_quadrupole"
+    when "PS::SPJMonopoleGeometricCenter"
+      "fdps_spj_monopole_geomcen"
+    when "PS::SPJDipoleGeometricCenter"
+      "fdps_spj_dipole_geomcen"
+    when "PS::SPJQuadrupoleGeometricCenter"
+      "fdps_spj_quadrupole_geomcen"
+    when "PS::SPJMonopoleScatter"
+      "fdps_spj_monopole_scatter"
+    when "PS::SPJQuadrupoleScatter"
+      "fdps_spj_quadrupole_scatter"
+    when "PS::SPJMonopoleSymmetry"
+      "fdps_spj_quadrupole_symmetry"
+    when "PS::SPJQuadrupoleSymmetry"
+      "fdps_spj_quadrupole_symmetry"
+    when "PS::SPJMonopoleCutoff"
+      "fdps_spj_monopole_cutoff"
+    else
+      name
+    end
+  end
+
+  def generate_prototype_decl_file()
+    code =  ""
+    code += "#ifndef H_PROTOTYPE_DECL_#{$interface_name.capitalize}\n"
+    code += "#define H_PROTOTYPE_DECL_#{$interface_name.capitalize}\n"
+    code += "#include <pikg_vector.h>\n"
+    #code += "void #{$interface_name}(const struct #{$epi_name}*, const int, const struct #{convert_fdps_defined_type($epj_name)}*,const int, struct #{$force_name}*);\n"
+    code += "void #{$interface_name}(void*, const int, void*,const int, void*);\n"
+    code += "void #{$initializer_name}("
+    count = 0
+    $varhash.each{|v|
+      iotype = v[1][0]
+      if iotype == "MEMBER"
+        code += "," if count > 0
+        name = v[0]
+        type = v[1][1]
+        code += c_interface_type_decl(type) + " " + name +"_"
+        count = count + 1
+      end
+    }
+    code += ");\n"
+    code += "#endif\n"
+    File.open($prototype_decl_name, mode = 'w'){ |f|
+      f.write(code)
+    }
+  end
+
+  def fortran_type(type)
+    case type
+    when "F64"
+      "real(kind=c_double)"
+    when "F32"
+      "real(kind=c_float)"
+    when "S64"
+      "integer(kind=c_long_long)"
+    when "S32"
+      "integer(kind=c_int)"
+    when "F64vec"
+      "pikg_f64vec3"
+    when "F64vec2"
+      "pikg_f64vec2"
+    when "F64vec3"
+      "pikg_f64vec3"
+    when "F32vec"
+      "pikg_f32vec3"
+    when "F32vec2"
+      "pikg_f32vec2"
+    when "F32vec3"
+      "pikg_f32vec3"
+    else
+      abort "unsupported fortran type"
+    end
+  end
+
+  def generate_fortran_module()
+    indent = "   "
+    code =  ""
+    code += "module #{$module_name}\n"
+    code += indent + "use, intrinsic :: iso_c_binding\n"
+    code += "\n"
+    code += indent + "interface\n"
+    code += "\n"
+    code += indent * 2 + "subroutine #{$interface_name}(epi, ni, epj, nj, force) &\n"
+    code += indent * 4 + "bind(c,name='#{$interface_name}')\n"
+    code += indent * 3 + "use, intrinsic :: iso_c_binding\n"
+    code += indent * 3 + "implicit none\n"
+    code += indent * 3 + "integer(kind=c_int), value :: ni,nj\n"
+    code += indent * 3 + "type(c_ptr), value :: epi, epj, force\n"
+    code += indent * 2 + "end subroutine\n"
+    code += "\n"
+    code += indent * 2 + "subroutine #{$initializer_name} &\n"
+    code += indent * 3 + "( &\n"
+    count = 0
+    $varhash.each{|v|
+      iotype = v[1][0]
+      if iotype == "MEMBER"
+        code += "," if count > 0
+        name = v[0]
+        code += indent * 3 + name + " & \n"
+        count = count + 1
+      end
+    }
+    code += indent * 3 + ") &\n"
+    code += indent * 4 + "bind(c,name='#{$initializer_name}')\n"
+    code += indent * 3 + "use, intrinsic :: iso_c_binding\n"
+    code += indent * 3 + "implicit none\n"
+    $varhash.each{|v|
+      iotype = v[1][0]
+      if iotype == "MEMBER"
+        name = v[0]
+        type = v[1][1]
+        code += indent * 3 + fortran_type(type) + ", value :: " + name + "\n"
+      end
+    }
+    code += indent * 2 + "end subroutine\n\n" 
+    code += indent + "end interface\n\n"
+    code += "end module #{$module_name}\n"
+    $module_file_name = $module_name + ".F90"
+    File.open($module_file_name, mode = 'w'){ |f|
+      f.write(code)
+    }
   end
 
   def make_conditional_branch_block(h = $varhash)
@@ -1215,14 +1340,81 @@ while true
   when "--output"
     $output_file = ARGV.shift
     warn "output file name: #{$output_file}\n"
+  when "--initializer-name"
+    $initializer_name = ARGV.shift
+    warn "kernel initializer name: #{$initializer_name}"
+  when "--additional-text"
+     $additional_text = ARGV.shift
+    warn "additional text: #{$additional_text}"
   when "--multiwalk"
     $is_multi_walk = true
     warn "multi walk mode\n"
+  when "--c-interface"
+    $c_interface = true
+    warn "c interface mode on\n"
+    if !ARGV.empty? && ARGV[0][0] != "-"
+      $prototype_decl_name = ARGV.shift
+      warn "prototype decl file name: #{$prototype_decl_name}"
+    end
+  when "--fortran-interface"
+    $fortran_interface = true
+    warn "fortran interface mode on\n"
+    $module_name = ARGV.shift
+    warn "module name: #{$module_name}"
+  when "--version"
+    warn "pikg version 0.1"
+    abort
+  when "--help"
+    help_message = "available options:\n"
+    help_message += "--input | -i file_name : input file name\n"
+    help_message += "--output | -o file_name : output file name (without this option, kernel code is shown on stdout)\n"
+    help_message += "--kernel-name kernel_name : kernel name\n"
+    help_message += "--epi-name epi_name : c++ class name of EPI\n"
+    help_message += "--epj-name epj_name : c++ class name of EPJ\n"
+    help_message += "--force-name force_name : c++ class name of FORCE\n"
+    help_message += "--conversion-type type : target architecture (AVX2,AVX-512, or A64FX)\n"
+    help_message += "--c-iterface [file_name] : enable c-interface mode. header file name of prototype definition can be specified.\n"
+    help_message += "--fortran-iterface module_name : enable fortran-interface mode. c-interface mode is automatically enabled. specify kernel module name as module_name. module is output to module_name + \".F90\"\n"
+    help_message += "--initializer-name [func_name] : function name of kernel initializer for c-interface\n"
+    help_message += "--version : show version info\n"
+    help_message += "--help : show this help message\n"
+    
+    warn help_message
+    abort
   else
     abort "error: unsupported option #{opt}"
   end
 end
 #abort "output file must be specified with --output option" if $output_file == nil
+
+if $c_interface
+  $c_interface_impl = true
+  $c_interface_decl = true
+end
+if $fortran_interface
+  $c_interface_impl = true
+  $c_interface_decl = false
+end
+
+if $c_interface_impl || $c_interface_decl
+  $interface_name = $kernel_name
+  $kernel_name = $kernel_name + "_"
+  $initializer_name = $interface_name + "_initialize" if $initializer_name == nil
+end
+
+if $c_interface_decl
+  if $prototype_decl_name == nil
+    tmp =  $output_file.split ('.')
+
+    if tmp.length > 1
+      tmp[-1] = "h"
+      $prototype_decl_name = tmp.join('.')
+    else
+      $prototype_decl_name = tmp.join + ".h"
+    end
+    warn "prototype decl file name: #{$prototype_decl_name}"
+  end
+end
 
 src = ""
 program=parser.parse(filename)
@@ -1234,6 +1426,8 @@ program.expand_function
 program.expand_tree
 program.make_conditional_branch_block
 program.disassemble_statement
+program.generate_prototype_decl_file if $c_interface_decl
+program.generate_fortran_module if $fortran_interface
 if $is_multi_walk
   program.generate_optimized_code_multi_walk($conversion_type);
 else
