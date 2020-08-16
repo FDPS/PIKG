@@ -1374,7 +1374,7 @@ while true
     help_message += "--force-name force_name : c++ class name of FORCE\n"
     help_message += "--conversion-type type : target architecture (AVX2,AVX-512, or A64FX)\n"
     help_message += "--c-iterface [file_name] : enable c-interface mode. header file name of prototype definition can be specified.\n"
-    help_message += "--fortran-iterface [file_name] : enable fortran-interface mode. c-interface mode is automatically enabled. module name of prototype definition can be specified. module is output to file_name + \".F90\"\n"
+    help_message += "--fortran-iterface module_name : enable fortran-interface mode. c-interface mode is automatically enabled. module name of prototype definition can be specified. module is output to module_name + \".F90\"\n"
     help_message += "--initializer-name [func_name] : function name of kernel initializer for c-interface\n"
     help_message += "--version : show version info\n"
     help_message += "--help : show this help message\n"
