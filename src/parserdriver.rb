@@ -1363,6 +1363,26 @@ while true
       $module_name = ARGV.shift
       warn "module name: #{$module_name}"
     end
+  when "--version"
+    warn "pikg version 0.1"
+    abort
+  when "--help"
+    help_message = "available options:\n"
+    help_message += "--input | -i file_name : input file name\n"
+    help_message += "--output | -o file_name : output file name (without this option, kernel code is shown on stdout)\n"
+    help_message += "--kernel-name kernel_name : kernel name\n"
+    help_message += "--epi-name epi_name : c++ class name of EPI\n"
+    help_message += "--epj-name epj_name : c++ class name of EPJ\n"
+    help_message += "--force-name force_name : c++ class name of FORCE\n"
+    help_message += "--conversion-type type : target architecture (AVX2,AVX-512, or A64FX)\n"
+    help_message += "--c-iterface [file_name] : enable c-interface mode. header file name of prototype definition can be specified.\n"
+    help_message += "--fortran-iterface [file_name] : enable fortran-interface mode. c-interface mode is automatically enabled. module name of prototype definition can be specified. module is output to file_name + \".F90\"\n"
+    help_message += "--initializer-name [func_name] : function name of kernel initializer for c-interface\n"
+    help_message += "--version : show version info\n"
+    help_message += "--help : show this help message\n"
+    
+    warn help_message
+    abort
   else
     abort "error: unsupported option #{opt}"
   end
