@@ -868,7 +868,7 @@ class Kernelprogram
       code += "#include <pikg_avx512.hpp>\n"
     end
 
-    if $c_interface
+    if $c_interface_impl
       struct_list = ["EPI"]
       struct_list.push("EPJ") if $epi_name != $epj_name
       struct_list.push("FORCE") if $epi_name != $force_name && $epj_name != $force_name
