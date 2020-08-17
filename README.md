@@ -1,4 +1,4 @@
-# PIKG ver 0.1
+# PIKG ver 0.1a
 本プロジェクトは，FDPS( https://github.com/FDPS/FDPS )およびその他の粒子系シミュレータの粒子間相互作用カーネル関数の自動ジェネレータである.
 粒子間相互作用をDSLで記述し，パラメータを指定すると，任意のアーキテクチャ(Intel CPU, Fujitsu A64FX, NVIDIA GPU, PEZY-SC2, etc.)向けのカーネルを生成する．
 開発チームではぱいくじーもしくはぱいくと読んでいます．
@@ -38,9 +38,9 @@ output_fileにC++のヘッダーファイルができるので相互作用計算
 詳細についてはdoc/kernel_generator_spec.pdfを参照ください．
 
 現在参照できるサンプルは以下のとおりです．
-> ./sample/LennardJones
+> ./sample/c++/LennardJones
 
-> ./sample/Nbody
+> ./sample/{c++,c}/Nbody
 
 それぞれに関しては，各ディレクトリのREADME.mdをご参照ください．
 
