@@ -856,6 +856,7 @@ class Kernelprogram
   end
   def generate_optimized_code(conversion_type,output=$output_file)
     code = "#include<pikg_vector.hpp>\n"
+    code +="#include<cmath>\n"
     code += $additional_text if $additional_text != nil
     code += "\n"
     case conversion_type
@@ -865,6 +866,25 @@ class Kernelprogram
       code += "#include <pikg_avx2.hpp>\n"
     when /AVX-512/
       code += "#include <pikg_avx512.hpp>\n"
+    end
+
+    if $c_interface_impl
+      struct_list = ["EPI"]
+      struct_list.push("EPJ") if $epi_name != $epj_name
+      struct_list.push("FORCE") if $epi_name != $force_name && $epj_name != $force_name
+      struct_list.zip([$epi_name,$epj_name,$force_name]){ |c,n|
+        next if n.index("PS::")
+        code +=" struct #{n}{\n"
+        $varhash.each{|v|
+          iotype = v[1][0];
+          if iotype == c
+            type = v[1][1];
+            fdpsname = v[1][2];
+            code += "PIKG::#{type} #{fdpsname};\n"
+          end
+        }
+        code += "};\n"
+      }
     end
 
     code += kernel_class_def(conversion_type)
@@ -1362,7 +1382,7 @@ while true
     $module_name = ARGV.shift
     warn "module name: #{$module_name}"
   when "--version"
-    warn "pikg version 0.1"
+    warn "pikg version 0.1a"
     abort
   when "--help"
     help_message = "available options:\n"
