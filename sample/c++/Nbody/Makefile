@@ -1,10 +1,10 @@
 CC=g++
 CCFLAGS= -O2 
 
-PIKG_ROOT=../../
+PIKG_ROOT=../../../
 PIKG=$(PIKG_ROOT)/bin/pikg
 CONVERSION_TYPE=reference
-CCFLAGS += -I../../inc
+CCFLAGS += -I$(PIKG_ROOT)/inc
 
 PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name Particle --force-name Particle
 
