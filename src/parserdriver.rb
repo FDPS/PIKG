@@ -1383,7 +1383,7 @@ while true
     $module_name = ARGV.shift
     warn "module name: #{$module_name}"
   when "--version"
-    warn "pikg version 0.1a"
+    warn "pikg version 0.1b"
     abort
   when "--help"
     help_message = "available options:\n"
