@@ -684,7 +684,7 @@ class Kernelprogram
       iotype = v[1][0]
       if iotype == "EPI"
         type = v[1][1]
-        size = get_data_size(type)
+        size = get_single_data_size(type)
         max_size_epi = size if size > max_size_epi
       end
     }
@@ -1312,10 +1312,11 @@ parser=KernelParser.new
 $kernel_name="Kernel"
 $epi_name="EPI"
 $epj_name="EPJ"
-$force_name="Force"
+$force_name="FORCE"
 $conversion_type = "reference"
 $swpl_stage = 1
 $unroll_stage = 1
+$output_file = "kernel.hpp"
 while true
   opt = ARGV.shift
   break if opt == nil
@@ -1387,12 +1388,12 @@ while true
   when "--help"
     help_message = "available options:\n"
     help_message += "--input | -i file_name : input file name\n"
-    help_message += "--output | -o file_name : output file name (without this option, kernel code is shown on stdout)\n"
+    help_message += "--output | -o file_name : output file name (default: kernel.hpp)\n"
     help_message += "--kernel-name kernel_name : kernel name\n"
     help_message += "--epi-name epi_name : c++ class name of EPI\n"
     help_message += "--epj-name epj_name : c++ class name of EPJ\n"
     help_message += "--force-name force_name : c++ class name of FORCE\n"
-    help_message += "--conversion-type type : target architecture (AVX2,AVX-512, or A64FX)\n"
+    help_message += "--conversion-type type : target architecture (reference, AVX2, AVX-512, or A64FX)\n"
     help_message += "--c-iterface [file_name] : enable c-interface mode. header file name of prototype definition can be specified.\n"
     help_message += "--fortran-iterface module_name : enable fortran-interface mode. c-interface mode is automatically enabled. specify kernel module name as module_name. module is output to module_name + \".F90\"\n"
     help_message += "--initializer-name [func_name] : function name of kernel initializer for c-interface\n"
