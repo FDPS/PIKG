@@ -786,7 +786,7 @@ def soa2aos_simd(fvars,h=$varhash)
       modifier = h[v][3]
       if iotype == io
         if type =~ /vec/
-          ret += [Statement.new([Expression.new([:dot,vname,"v#{count+0}",type]),Expression.new([:dot,v,"x"]),Expression.new([:dot,v,"z"]),type])]
+          ret += [Statement.new([Expression.new([:dot,vname,"v#{count+0}",type]),Expression.new([:dot,v,"x"]),type])]
           ret += [Statement.new([Expression.new([:dot,vname,"v#{count+1}",type]),Expression.new([:dot,v,"y"]),type])]
           ret += [Statement.new([Expression.new([:dot,vname,"v#{count+2}",type]),Expression.new([:dot,v,"z"]),type])]
           count += 3
@@ -818,6 +818,5 @@ def soa2aos_simd(fvars,h=$varhash)
       end
     }
   end
-
   ret
 end

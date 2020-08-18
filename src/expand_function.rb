@@ -15,7 +15,7 @@ end
 class Statement
   def expand_function
     exp,statements = @expression.expand_function
-    tmp = Statement.new([@name,exp])
+    tmp = Statement.new([@name,exp,@type,@op])
     statements += [tmp]
     #p exp
     # statements.each{|s| p s}

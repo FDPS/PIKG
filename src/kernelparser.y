@@ -66,10 +66,10 @@ class KernelParser
 
   statement : var "="  expression EOL {result = [Statement.new([val[0],val[2]])]}
             | var "="  table EOL      {result = [TableDecl.new([val[0],val[2]])]}
-            | var '+=' expression EOL {result = [Statement.new([val[0],Expression.new([:plus, val[0], val[2]])])]}
-            | var '-=' expression EOL {result = [Statement.new([val[0],Expression.new([:minus,val[0], val[2]])])]}
-            | var '*=' expression EOL {result = [Statement.new([val[0],Expression.new([:mult,val[0], val[2]])])]}
-            | var '/=' expression EOL {result = [Statement.new([val[0],Expression.new([:div,val[0], val[2]])])]}
+            | var '+=' expression EOL {result = [Statement.new([val[0],val[2],nil,:plus])]}
+            | var '-=' expression EOL {result = [Statement.new([val[0],val[2],nil,:minus])]}
+            | var '*=' expression EOL {result = [Statement.new([val[0],val[2],nil,:mult])]}
+            | var '/=' expression EOL {result = [Statement.new([val[0],val[2],nil,:div])]}
             | pragma EOL {result = [val[0]]}
             | "if" expression EOL    {result = [IfElseState.new([:if,val[1]])]}
             | "else" EOL             {result = [IfElseState.new([:else,nil])]}

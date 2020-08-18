@@ -1,3 +1,27 @@
+def get_iotype_from_hash(v)
+  v[1][0]
+end
+def get_type_from_hash(v)
+  v[1][1]
+end
+def get_fdpsname_from_hash(v)
+  v[1][2]
+end
+def get_modifier_from_hash(v)
+  v[1][3]
+end
+
+def get_vector_elements(type)
+  case type
+  when /F(16|32|64)vec2/
+    ["x","y"]
+  when /F(16|32|64)vec(3)?/
+    ["x","y","z"]
+  when /F(16|32|64)vec4/
+    ["x","y","z","w"]
+  end
+end
+
 def sizeof(type)
   case type
   when /64/

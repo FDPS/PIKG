@@ -6,6 +6,7 @@ require_relative "expand_function.rb"
 require_relative "reduce_madd.rb"
 require_relative "loop_fission.rb"
 require_relative "software_pipelining.rb"
+require_relative "gen_hash.rb"
 
 require_relative "A64FX.rb"
 require_relative "AVX-512.rb"
@@ -109,10 +110,10 @@ def generate_force_related_map(ss,h=$varhash)
 end
 
 class Kernelprogram
-  def check_references
+  def check_references(h = $varhash)
     ref_list = []
-    @iodeclarations.each{ |d|
-      ref_list.push(d.name)
+    h.each{ |v|
+      ref_list.push(v[0])
     }
     @statements.each{ |s|
       ref_list.push(get_name(s))
@@ -160,8 +161,8 @@ class Kernelprogram
     #    print "print kernel\n"
     #p self
     #p $funchash
-    $varhash=process_iodecl(@iodeclarations)
-    $funchash=process_funcdecl(@functions)
+    #process_iodecl($varhash)
+    #process_funcdecl($funchash)
     #p $varhash
     @statements.each{|s|
       #p s
@@ -546,9 +547,9 @@ class Kernelprogram
           ret += [Declaration.new([type,name])]
           if modifier == "local"
             if type =~ /vec/
-              ret += [Statement.new([Expression.new([:dot,name,"x"]),Expression.new([:array,"#{name}_tmp_x",get_io_index(iotype),type]),type])]
-              ret += [Statement.new([Expression.new([:dot,name,"y"]),Expression.new([:array,"#{name}_tmp_y",get_io_index(iotype),type]),type])]
-              ret += [Statement.new([Expression.new([:dot,name,"z"]),Expression.new([:array,"#{name}_tmp_z",get_io_index(iotype),type]),type])]
+              get_vector_elements(type).each{ |dim|
+                ret += [Statement.new([Expression.new([:dot,name,dim]),Expression.new([:array,"#{name}_tmp_"+dim,get_io_index(iotype),type]),type])]
+              }
             else
               ret += [Statement.new([name,Expression.new([:array,"#{name}_tmp",get_io_index(iotype),type]),type])]
             end
@@ -1236,6 +1237,11 @@ class String
     end
   end
 
+  def fusion_iotag(iotag)
+    abort "fusion_iotag for #{iotag} failed" if self == iotag
+    self
+  end
+
   def replace_recursive(orig,replaced)
     if self == orig
       replaced
@@ -1286,27 +1292,6 @@ class String
 end
 
 
-def process_iodecl(ios)
-  a=[]
-  ios.each{|x|
-    a +=  [x.name, [x.iotype, x.type, x.fdpsname, x.modifier]]
-  }
-  #p a
-  Hash[*a]
-end
-
-def process_funcdecl(func)
-  a=[]
-  func.each{|x|
-    decl = x.decl
-    stmt = x.statements
-    ret  = x.retval
-    a += [decl.name, x]
-  }
-  # reserved name function
-
-  Hash[*a]
-end
 
 parser=KernelParser.new
 $kernel_name="Kernel"
@@ -1382,6 +1367,9 @@ while true
     warn "fortran interface mode on\n"
     $module_name = ARGV.shift
     warn "module name: #{$module_name}"
+  when "--class-file"
+    $class_file = ARGV.shift
+    warn "class file: #{$class_file}"
   when "--version"
     warn "pikg version 0.1b"
     abort
@@ -1439,10 +1427,20 @@ end
 
 src = ""
 program=parser.parse(filename)
-
-program.check_references
+$varhash = Hash.new
+if $class_file != nil
+  ["EPI","EPJ","FORCE"].zip([$epi_name,$epj_name,$force_name]){ |iotype,c|
+    program.generate_hash_from_cpp($class_file,iotype,c,$varhash)
+  }
+  program.generate_alias($varhash)
+else
+  program.process_iodecl($varhash)
+  program.process_funcdecl($varhash)
+end
+program.check_references($varhash)
 
 program.generate_hash("noconversion")
+
 program.expand_function
 program.expand_tree
 program.make_conditional_branch_block

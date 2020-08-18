@@ -210,6 +210,10 @@ class FloatingPoint
     @type
   end
 
+  def fusion_iotag(iotag)
+    self
+  end
+
   def replace_fdpsname_recursive(h=$varhash)
     self
   end
@@ -380,10 +384,10 @@ class ReturnState
 end
 
 class Statement
-  attr_accessor :name, :expression, :type
+  attr_accessor :name, :expression, :type, :op
   def initialize(x)
     #p x
-    @name, @expression, @type=x
+    @name, @expression, @type, @op=x
   end
   def get_type(h = $varhash)
     @type = @expression.get_type(h) if @type==nil
@@ -396,6 +400,12 @@ class Statement
       h[name] = [nil, @type, nil]
     end
   end
+
+  def fusion_iotag(iotag)
+    @name = @name.lop + "_" + @name.rop if @name.class == Expression && @name.lop == iotag
+    @expression = @expression.fusion_iotag(iotag)
+  end
+  
   def get_related_variable
     [get_name(self)] + @expression.get_related_variable
   end
@@ -431,6 +441,10 @@ class Statement
   end
 
   def expand_tree
+    if @op !=nil
+      @expression = Expression.new([@op,@name,@expression,@type])
+      @op = nil
+    end
     ret = expand_inner_prod(@expression)
     @expression = ret
   end
@@ -461,7 +475,13 @@ class Statement
     #p self
     #p @name
     #p $varhash[@name]
-    ret = @name.convert_to_code(conversion_type) + " = " + @expression.convert_to_code(conversion_type) + ";"
+    if @op == nil
+      ret = @name.convert_to_code(conversion_type) + " = " + @expression.convert_to_code(conversion_type) + ";"
+    else
+      warn "convert_to_code for non simple assigned operator is used"
+      p self
+      ret = @name.convert_to_code(conversion_type) + " = " + Expression.new([@op,@name,@expression,@type]).convert_to_code(conversion_type) + ";"
+    end
     ret
   end
 end
@@ -550,6 +570,10 @@ class FuncCall
     ret_type
   end
 
+  def fusion_iotag(iotag)
+    self
+  end
+  
   def find_function
     [self]
   end
@@ -766,13 +790,13 @@ class PointerOf
     @exp.get_type(h)
   end
   def convert_to_code(conversion_type)
-    #"(#{get_pointer_type(@type)})&#{@exp.convert_to_code(conversion_type)}"
     case conversion_type
     when "reference"
-      "#{@exp.convert_to_code("reference")}"
+      ret = "#{@exp.convert_to_code("reference")}"
     when /(A64FX|AVX2|AVX-512)/
-      "((#{get_pointer_type(@type)})&#{@exp.convert_to_code("reference")})"
+      ret = "((#{get_pointer_type(@type)})&#{@exp.convert_to_code("reference")})"
     end
+    ret
   end
 end
 
@@ -1285,6 +1309,17 @@ class Expression
     end
     abort "get_type failed" if @type == nil
     @type
+  end
+
+  def fusion_iotag(iotag)
+    if @lop == iotag && @operator == :dot
+      ret = @lop + "_" + @rop
+    else
+      @lop = @lop.fusion_iotag(iotag)
+      @rop = @rop.fusion_iotag(iotag)
+      ret = self
+    end
+    ret
   end
 
   def find_function

@@ -833,28 +833,28 @@ module_eval(<<'.,.,', 'kernelparser.y', 67)
 
 module_eval(<<'.,.,', 'kernelparser.y', 68)
   def _reduce_42(val, _values, result)
-    result = [Statement.new([val[0],Expression.new([:plus, val[0], val[2]])])]
+    result = [Statement.new([val[0],val[2],nil,:plus])]
     result
   end
 .,.,
 
 module_eval(<<'.,.,', 'kernelparser.y', 69)
   def _reduce_43(val, _values, result)
-    result = [Statement.new([val[0],Expression.new([:minus,val[0], val[2]])])]
+    result = [Statement.new([val[0],val[2],nil,:minus])]
     result
   end
 .,.,
 
 module_eval(<<'.,.,', 'kernelparser.y', 70)
   def _reduce_44(val, _values, result)
-    result = [Statement.new([val[0],Expression.new([:mult,val[0], val[2]])])]
+    result = [Statement.new([val[0],val[2],nil,:mult])]
     result
   end
 .,.,
 
 module_eval(<<'.,.,', 'kernelparser.y', 71)
   def _reduce_45(val, _values, result)
-    result = [Statement.new([val[0],Expression.new([:div,val[0], val[2]])])]
+    result = [Statement.new([val[0],val[2],nil,:div])]
     result
   end
 .,.,
