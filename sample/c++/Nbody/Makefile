@@ -6,7 +6,7 @@ PIKG=$(PIKG_ROOT)/bin/pikg
 CONVERSION_TYPE=reference
 CCFLAGS += -I$(PIKG_ROOT)/inc
 
-PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name Particle --force-name Particle
+PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name Particle --epj-name Particle --force-name Particle --class-file nbody.cpp
 
 # AVX2 mode
 #CONVERSION_TYPE=AVX2 

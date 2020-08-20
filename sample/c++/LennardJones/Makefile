@@ -7,7 +7,7 @@ CONVERSION_TYPE=reference
 
 CCFLAGS += -I$(PIKG_ROOT)/inc
 
-PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name EP --epj-name EP --force-name Force
+PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name EP --epj-name EP --force-name Force --class-file main.cpp
 # AVX2 mode
 #CONVERSION_TYPE=AVX2 
 #CCFLAGS += -mavx2 -mfma -ffast-math
