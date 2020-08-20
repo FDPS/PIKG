@@ -106,7 +106,7 @@ class Kernelprogram
               h[iotype+"."+v] = [iotype,type,v,nil]
             }
           elsif line =~ /#{ident}\ +#{ident}(\ *,\ *#{ident})*\ *\n/
-            warn "undefined type: #{line}"
+            #warn "undefined type: #{line}"
           end
         end
         nest_level -= 1 if line =~ /\}/
