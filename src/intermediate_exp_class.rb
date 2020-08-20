@@ -3,7 +3,11 @@ class Kernelprogram
   attr_accessor :iodeclarations, :functions, :statements
   def initialize(x)
     #@iodeclarations, @functions, @statements =*x
-    @iodeclarations = x.shift
+    if x[0][0].class == Iodeclaration
+      @iodeclarations = x.shift
+    else
+      @iodeclarations = []
+    end
     if x[0][0].class == Function
       @functions = x.shift
     else
@@ -272,6 +276,9 @@ class IntegerValue
     end
   end
 
+  def fusion_iotag(iotag)
+    self
+  end
   def get_type(h = $varhash)
     @type
   end
@@ -675,6 +682,9 @@ class IfElseState
     ret = []
     ret += @expression.get_related_variable if @expression != nil
     ret
+  end
+  def fusion_iotag(iotag)
+    @expression = @expression.fusion_iotag(iotag) if @operator == :if || @operator == :elsif
   end
   def convert_to_code(conversion_type)
     ret = ""
@@ -1316,7 +1326,7 @@ class Expression
       ret = @lop + "_" + @rop
     else
       @lop = @lop.fusion_iotag(iotag)
-      @rop = @rop.fusion_iotag(iotag)
+      @rop = @rop.fusion_iotag(iotag) if @rop != nil
       ret = self
     end
     ret

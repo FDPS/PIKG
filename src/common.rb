@@ -339,7 +339,7 @@ def count_class_member(io,h=$varhash)
     iotype = v[1][0]
     type   = v[1][1]
     modifier = v[1][3]
-    if iotype == io
+    if iotype == io && modifier == nil
       prev_type = type.delete("vec") if tot == 0
       byte = byte_count(type)
       tot += byte_count(type) if modifier == nil

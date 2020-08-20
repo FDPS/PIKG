@@ -100,13 +100,23 @@ def generate_related_map(fs,ss,h=$varhash)
 end
 
 def generate_force_related_map(ss,h=$varhash)
-  fs = []
-  h.each{ |v|
-    iotype = v[1][0]
-    fs += [v[0]] if iotype == "FORCE"
+  fvars = []
+  ss.reverse_each{ |s|
+    if isStatement(s)
+      name = get_name(s)
+      if h[name][0] == "FORCE"
+        fvars += [name] + s.expression.get_related_variable
+      elsif fvars.index(name)
+        fvars += s.expression.get_related_variable
+      end
+    elsif s.class == ConditionalBranch
+      s.conditions.zip(s.bodies){ |c,b|
+        fvars += generate_force_related_map(b,h)
+        fvars += c.get_related_variable
+      }
+    end
   }
-  ret = generate_related_map2(fs,ss,h)
-  ret
+  fvars.sort.uniq
 end
 
 class Kernelprogram
@@ -174,6 +184,8 @@ class Kernelprogram
               s.type = type + "vec"
               s.add_to_varhash
               s.type = type
+            elsif $varhash[s.name.lop + "_" + s.name.rop] != nil
+              
             else
               abort  "left value must be vector or scalar variable"
             end
@@ -577,12 +589,14 @@ class Kernelprogram
           name = v[0]
           type = v[1][1]
           fdpsname = v[1][2]
-          if type =~ /vec/
-            ret += [StoreState.new([Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),get_io_index(iotype),type]),fdpsname,type]),"x"]),Expression.new([:dot,name,"x"]),type])]
-            ret += [StoreState.new([Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),get_io_index(iotype),type]),fdpsname,type]),"y"]),Expression.new([:dot,name,"y"]),type])]
-            ret += [StoreState.new([Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),get_io_index(iotype),type]),fdpsname,type]),"z"]),Expression.new([:dot,name,"z"]),type])]
-          else
-            ret += [StoreState.new([Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),get_io_index(iotype),type]),fdpsname,type]),name,type])]
+          if fvars.index(name)
+            if type =~ /vec/
+              ret += [StoreState.new([Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),get_io_index(iotype),type]),fdpsname,type]),"x"]),Expression.new([:dot,name,"x"]),type])]
+              ret += [StoreState.new([Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),get_io_index(iotype),type]),fdpsname,type]),"y"]),Expression.new([:dot,name,"y"]),type])]
+              ret += [StoreState.new([Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),get_io_index(iotype),type]),fdpsname,type]),"z"]),Expression.new([:dot,name,"z"]),type])]
+            else
+              ret += [StoreState.new([Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),get_io_index(iotype),type]),fdpsname,type]),name,type])]
+            end
           end
         end
       }
@@ -875,12 +889,13 @@ class Kernelprogram
       struct_list.push("FORCE") if $epi_name != $force_name && $epj_name != $force_name
       struct_list.zip([$epi_name,$epj_name,$force_name]){ |c,n|
         next if n.index("PS::")
-        code +=" struct #{n}{\n"
+        code +="struct #{n}{\n"
         $varhash.each{|v|
-          iotype = v[1][0];
-          if iotype == c
-            type = v[1][1];
-            fdpsname = v[1][2];
+          iotype = get_iotype_from_hash(v);
+          modifier = get_modifier_from_hash(v)
+          if iotype == c && modifier == nil
+            type = get_type_from_hash(v)
+            fdpsname = get_fdpsname_from_hash(v)
             code += "PIKG::#{type} #{fdpsname};\n"
           end
         }
@@ -951,7 +966,7 @@ class Kernelprogram
     when "F32"
       "float"
     when "S64"
-      "long long int "
+      "long long int"
     when "S32"
       "int"
     when "U64"
@@ -1053,7 +1068,7 @@ class Kernelprogram
     when "F32vec2"
       "pikg_f32vec2"
     when "F32vec3"
-      "pikg_f32vec3"
+      "pikg_f32vec"
     else
       abort "unsupported fortran type"
     end
@@ -1368,8 +1383,17 @@ while true
     $module_name = ARGV.shift
     warn "module name: #{$module_name}"
   when "--class-file"
-    $class_file = ARGV.shift
-    warn "class file: #{$class_file}"
+    $epi_file = ARGV.shift
+    if ARGV[0][0] != "-"
+      warn "epi class file: #{$epi_file}"
+      $epj_file = ARGV.shift
+      warn "epj class file: #{$epj_file}"
+      $force_file = ARGV.shift
+      warn "force class file: #{$force_file}"
+    else
+      $epj_file = $force_file = $epi_file
+      warn "class file: #{$epi_file}"
+    end
   when "--version"
     warn "pikg version 0.1b"
     abort
@@ -1377,14 +1401,15 @@ while true
     help_message = "available options:\n"
     help_message += "--input | -i file_name : input file name\n"
     help_message += "--output | -o file_name : output file name (default: kernel.hpp)\n"
-    help_message += "--kernel-name kernel_name : kernel name\n"
-    help_message += "--epi-name epi_name : c++ class name of EPI\n"
-    help_message += "--epj-name epj_name : c++ class name of EPJ\n"
-    help_message += "--force-name force_name : c++ class name of FORCE\n"
+    help_message += "--kernel-name kernel_name : kernel name (default: Kernel)\n"
+    help_message += "--epi-name epi_name : c++ class name of EPI (default: EPI)\n"
+    help_message += "--epj-name epj_name : c++ class name of EPJ (default: EPJ)\n"
+    help_message += "--force-name force_name : c++ class name of FORCE (default: FORCE)\n"
+    help_message += "--class-file epi_file_name [epj_file_name force_file_name] : file name which include EPI/EPJ/FORCE class definition. If this option is not enabled, you need to declare alias of all the member variable of EPI/EPJ/FORCE in input file. If you specified a sigle file_name, the file_name is used for all EPI/EPJ/FORCE class. (default: nil)\n"
     help_message += "--conversion-type type : target architecture (reference, AVX2, AVX-512, or A64FX)\n"
     help_message += "--c-iterface [file_name] : enable c-interface mode. header file name of prototype definition can be specified.\n"
     help_message += "--fortran-iterface module_name : enable fortran-interface mode. c-interface mode is automatically enabled. specify kernel module name as module_name. module is output to module_name + \".F90\"\n"
-    help_message += "--initializer-name [func_name] : function name of kernel initializer for c-interface\n"
+    help_message += "--initializer-name [func_name] : function name of kernel initializer for c-interface (default: kernel_name + \"_initialize\")\n"
     help_message += "--version : show version info\n"
     help_message += "--help : show this help message\n"
     
@@ -1428,9 +1453,16 @@ end
 src = ""
 program=parser.parse(filename)
 $varhash = Hash.new
-if $class_file != nil
-  ["EPI","EPJ","FORCE"].zip([$epi_name,$epj_name,$force_name]){ |iotype,c|
-    program.generate_hash_from_cpp($class_file,iotype,c,$varhash)
+if $epi_file != nil && $epj_file != nil && $force_file != nil
+  ["EPI","EPJ","FORCE"].each{ |iotype|
+    class_file, class_name = [[$epi_file,$epi_name],[$epi_file,$epj_name],[$force_file,$force_name]][["EPI","EPJ","FORCE"].index(iotype)]
+    if $fortran_interface
+      program.generate_hash_from_fortran(class_file,iotype,class_name,$varhash)
+    elsif $c_interface
+      program.generate_hash_from_c(class_file,iotype,class_name,$varhash)
+    else
+      program.generate_hash_from_cpp(class_file,iotype,class_name,$varhash)
+    end
   }
   program.generate_alias($varhash)
 else

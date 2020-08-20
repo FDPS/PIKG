@@ -799,12 +799,12 @@ def soa2aos_simd(fvars,h=$varhash)
     type = "F#{max_byte_size}"
     ret += [StructureStore.new([PointerOf.new([type,Expression.new([:array,get_iotype_array(io),"i",type])]),vname,nelem,type])]
   else # is not uniform
-    h.each{ |v|
-      name = v[0]
-      iotype   = v[1][0]
-      type     = v[1][1]
-      fdpsname = v[1][2]
-      modifier = v[1][3]
+    fvars.each{ |v|
+      name = v
+      iotype   = h[v][0]
+      type     = h[v][1]
+      fdpsname = h[v][2]
+      modifier = h[v][3]
       if iotype == io
         tmp_type = type.delete("vec")
         tmp_offset = offset * max_byte_size / byte_count(tmp_type)

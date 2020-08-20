@@ -18,6 +18,7 @@ class KernelParser
 
   innerkernel: iodeclarations functions statements {result=Kernelprogram.new(val)}
              | iodeclarations statements           {result=Kernelprogram.new(val)}
+             | statements                          {result=Kernelprogram.new(val)}
   iodeclarations: iodeclaration
                 | iodeclarations iodeclaration {result = val[0]+val[1]}
   iodeclaration: iotype type varname ':' fdpsname EOL          {result = [Iodeclaration.new([val[0],val[1],val[2],val[4],nil])]}
@@ -112,6 +113,7 @@ class KernelParser
 
   var: IDENT               {result = val[0]}
      | IDENT '.' IDENT     {result = Expression.new([:dot,val[0],val[2]])}
+     | "FORCE" '.' IDENT   {result = Expression.new([:dot,val[0],val[2]])}
      | IDENT '[' var ']'   {result = Expression.new([:array,val[0],val[2]])}
      | number
 
@@ -171,7 +173,7 @@ def parse(filename)
       end
       count += 1
       $lines.push([count,str])
-      if a[0] =~ /(EPI|EPJ|FORCE|MEMBER|ACCUM|TABLE)/
+      if a[0] =~ /(EPI|EPJ|FORCE|MEMBER|ACCUM|TABLE)/ && a[1] != '.'
         io = a[0]
         @q << iotype(a.shift) # iotype
       end
