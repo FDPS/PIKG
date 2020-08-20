@@ -330,6 +330,7 @@ class Kernelprogram
           end
         }
         s.replace_name(lexp,"FORCE_"+lexp) if type != nil
+        s.expression.replace_recursive(lexp,"FORCE_"+lexp) if type != nil
 
         append_iotag(s,"EPI",h)
         append_iotag(s,"EPJ",h)
