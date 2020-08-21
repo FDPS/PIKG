@@ -470,7 +470,6 @@ class IfElseState
     if $condition_queue == nil
       $condition_queue = Array.new()
     end
-    p self
     type = "B" + sizeof(@expression.get_type) if @expression != nil
     ret = ""
     case @operator
@@ -706,23 +705,46 @@ def aos2soa_simd(fvars,h=$varhash)
         end
       }
       count = 0
-      fvars.each{ |v|
-        if h[v][0] == io
-          type_single = get_single_element_type(type)
-          vdim = get_vector_dim(h[v][1])
-          if vdim > 1
-            for i in 0...vdim
-              dest = Expression.new([:dot,v,["x","y","z","w"][i],type_single])
-              src  = Expression.new([:dot,vname,["v0","v1","v2","v3"][i],type_single])
-              ret += [Statement.new([dest,src,type_single])]
+      h.each{ |v|
+        if v[1][0] == io
+          fvars.each{ |name|
+            if name == v[0]
+              type_single = get_single_element_type(type)
+              vdim = get_vector_dim(v[1][1])
+              if vdim > 1
+                for i in 0...vdim
+                  dest = Expression.new([:dot,v[0],["x","y","z","w"][i],type_single])
+                  src  = Expression.new([:dot,vname,["v0","v1","v2","v3"][i+count],type_single])
+                  ret += [Statement.new([dest,src,type_single])]
+                end
+                count += vdim
+              else
+                ret += [Statement.new([v[0],Expression.new([:dot,vname,"v#{count}",type_single]),type_single])]
+                count += 1
+              end
             end
-            count += vdim
-          else
-            ret += [Statement.new([v,Expression.new([:dot,vname,"v#{count}",type_single]),type_single])]
-            count += 1
-          end
+          }
         end
       }
+#      fvars.each{ |v|
+#        if h[v][0] == io
+#          type_single = get_single_element_type(type)
+#          vdim = get_vector_dim(h[v][1])
+#          p v
+#          p count
+#          if vdim > 1
+#            for i in 0...vdim
+#              dest = Expression.new([:dot,v,["x","y","z","w"][i],type_single])
+#              src  = Expression.new([:dot,vname,["v0","v1","v2","v3"][i+count],type_single])
+#              ret += [Statement.new([dest,src,type_single])]
+#            end
+#            count += vdim
+#          else
+#            ret += [Statement.new([v,Expression.new([:dot,vname,"v#{count}",type_single]),type_single])]
+#            count += 1
+#          end
+#        end
+#      }
     else # is not uniform
       fvars.each{ |v|
         name = v
