@@ -308,7 +308,7 @@ EPI，EPJもしくはFORCEがつかない場合，カーネル関数オブジェ
 前述の相互作用記述部は以下のようにも記述できる．
 \begin{verbatim}
 	dr = pos - EPJ.pos
-	r2 = dr * dr * eps2
+	r2 = dr * dr + eps2
 	rinv = rsqrt(r2)
 	mr_inv = mass * rinv
 	mr3_inv = mr_inv * rinv * rinv
@@ -361,7 +361,7 @@ EPI，EPJもしくはFORCEがつかない場合，カーネル関数オブジェ
 	FORCE F64    pot:pot
 
 	dr = xi - xj
-	r2 = dr * dr * eps2
+	r2 = dr * dr + eps2
 	rinv = rsqrt(r2)
 	mr_inv = mj * rinv
 	mr3_inv = mr_inv * rinv * rinv
