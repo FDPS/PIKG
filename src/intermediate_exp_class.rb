@@ -822,7 +822,7 @@ class GatherLoad
     when /A64FX/
       index_name = "index_gather_load#{$gather_load_count}"
       vindex_name = "v" + index_name
-      nelem = get_num_elem(conversion_type)
+      nelem = get_num_elem(@type,conversion_type)
 
       index = "#{@offset.to_i}"
       for i in 1...nelem
