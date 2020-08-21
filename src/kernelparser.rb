@@ -28,7 +28,7 @@ end
 
 class KernelParser < Racc::Parser
 
-module_eval(<<'...end kernelparser.y/module_eval...', 'kernelparser.y', 154)
+module_eval(<<'...end kernelparser.y/module_eval...', 'kernelparser.y', 159)
 def vartype(string)
 [[:F64VEC,:F64,:F32VEC,:F32,:F16VEC,:F16,:S64,:U64,:S32,:U32,:S16,:U16][["F64vec","F64","F32vec","F32","F16vec","F16","S64","U64","S32","U32","S16","U16"].index(string)],string]
 end
@@ -44,9 +44,9 @@ def parse(filename)
   open(filename){ |f|
     count = 0
     f.each_line{|str|
-      a=str.chomp.split(/(\s|:|\=\=|\!\=|\+\=|-\=|\*\=|\&\&|\|\||\&|\||\+|-|\*|\/|\=|\(|\)|,|\.|>\=|<\=|>|<|\[|\]|;|~|\^)/).select{|s| s=~/\S+/}
-      symbols = /(\=\=|\!\=|\&\&|\|\||\&|\||\+|-|\*|\/|\(|\)|,|\.|>\=|<\=|>|<|\[|\]|\{|\})/
-      if a == []
+      a=str.chomp.split(/(\/\/|\s|:|\=\=|\!\=|\+\=|-\=|\*\=|\&\&|\|\||\&|\||\+|-|\*|\/|\=|\(|\)|,|\.|>\=|<\=|>|<|\[|\]|;|~|\^)/).select{|s| s=~/\S+/}
+      symbols = /^(\=\=|\!\=|\&\&|\|\||\&|\||\+|-|\*|\/|\(|\)|,|\.|>\=|<\=|>|<|\[|\]|\{|\})$/
+      if a == [] || a[0] == "//"
         next
       end
       count += 1
@@ -80,6 +80,8 @@ def parse(filename)
             @q << [',', x]
           elsif x  == ')'
             @q << [')', x]
+	  elsif x == "//"
+	       break
           else
             @q << [:IDENT, x]
           end
@@ -91,6 +93,8 @@ def parse(filename)
             @q << [x, x]
 	  elsif x =~ /^\d+(f|h|s|l|u|us|ul)?$/
             @q << [:DEC, x]
+	  elsif x == "//"
+		break
           else
             @q << [:IDENT, x]
           end
@@ -101,7 +105,12 @@ def parse(filename)
         #p a
         @q << ["#pragma",a.shift]
         a.each{|x|
-	  @q << [:TEXT,x]
+	  if x == "//"
+	       break
+	  else
+	    @q << [:TEXT,x]
+          end
+	       
         }
       elsif a[0] == "if"
         @q << ["if","if"]
@@ -111,6 +120,8 @@ def parse(filename)
 	    @q << [x,x]
 	  elsif x =~ /^\d+(f|h|s|l|u|us|ul)?$/
             @q << [:DEC, x]
+	  elsif x == "//"
+	    break
           else
             @q << [:IDENT, x]
 	  end
@@ -123,6 +134,8 @@ def parse(filename)
 	    @q << [x,x]
 	  elsif x =~ /^\d+(f|h|s|l|u|us|ul)?$/
 	    @q << [:DEC, x]
+	  elsif x == "//"
+	    break
 	  else
             @q << [:IDENT, x]
 	  end
@@ -142,10 +155,12 @@ def parse(filename)
             @q << [x,x]
 	  elsif x =~/^\d+(f|h|s|l|u|us|ul)?$/
             @q << [:DEC,x]
+          elsif x == "//"
+	    break   
           else
             @q << [:IDENT,x]
           end
-        }
+	}
       elsif a[3] =~ /(\=|\+\=|-\=)/
         #print "statement \n"
         @q << [:IDENT,a.shift] # var
@@ -159,12 +174,13 @@ def parse(filename)
             @q << [x,x]
 	  elsif x =~/^\d+(f|h|s|l|u|us|ul)?$/
             @q << [:DEC,x]
+	  elsif x == "break"
+	    break
           else
             @q << [:IDENT,x]
           end
         }
       else
-	p a
         warn "error: unsupported DSL description"
         warn "  line #{f.lineno}: #{str}"
         abort
@@ -924,35 +940,35 @@ module_eval(<<'.,.,', 'kernelparser.y', 77)
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 79)
+module_eval(<<'.,.,', 'kernelparser.y', 78)
   def _reduce_52(val, _values, result)
     result = Pragma.new([val[1],nil])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 80)
+module_eval(<<'.,.,', 'kernelparser.y', 79)
   def _reduce_53(val, _values, result)
     result = Pragma.new([val[1],val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 81)
+module_eval(<<'.,.,', 'kernelparser.y', 80)
   def _reduce_54(val, _values, result)
      result = val[0]
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 82)
+module_eval(<<'.,.,', 'kernelparser.y', 81)
   def _reduce_55(val, _values, result)
      result = val[0] + val[1]
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 83)
+module_eval(<<'.,.,', 'kernelparser.y', 82)
   def _reduce_56(val, _values, result)
      result = [val[0]]
     result
@@ -961,119 +977,119 @@ module_eval(<<'.,.,', 'kernelparser.y', 83)
 
 # reduce 57 omitted
 
-module_eval(<<'.,.,', 'kernelparser.y', 87)
+module_eval(<<'.,.,', 'kernelparser.y', 90)
   def _reduce_58(val, _values, result)
     result = Expression.new([:plus,  val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 88)
+module_eval(<<'.,.,', 'kernelparser.y', 91)
   def _reduce_59(val, _values, result)
     result = Expression.new([:minus, val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 89)
+module_eval(<<'.,.,', 'kernelparser.y', 92)
   def _reduce_60(val, _values, result)
     result = Expression.new([:mult,  val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 90)
+module_eval(<<'.,.,', 'kernelparser.y', 93)
   def _reduce_61(val, _values, result)
     result = Expression.new([:div,   val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 91)
+module_eval(<<'.,.,', 'kernelparser.y', 94)
   def _reduce_62(val, _values, result)
     result = Expression.new([:eq,    val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 92)
+module_eval(<<'.,.,', 'kernelparser.y', 95)
   def _reduce_63(val, _values, result)
     result = Expression.new([:neq,   val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 93)
+module_eval(<<'.,.,', 'kernelparser.y', 96)
   def _reduce_64(val, _values, result)
     result = Expression.new([:and,   val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 94)
+module_eval(<<'.,.,', 'kernelparser.y', 97)
   def _reduce_65(val, _values, result)
     result = Expression.new([:or,    val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 95)
+module_eval(<<'.,.,', 'kernelparser.y', 98)
   def _reduce_66(val, _values, result)
     result = Expression.new([:land,   val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 96)
+module_eval(<<'.,.,', 'kernelparser.y', 99)
   def _reduce_67(val, _values, result)
     result = Expression.new([:lor,    val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 97)
+module_eval(<<'.,.,', 'kernelparser.y', 100)
   def _reduce_68(val, _values, result)
     result = Expression.new([:gt,    val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 98)
+module_eval(<<'.,.,', 'kernelparser.y', 101)
   def _reduce_69(val, _values, result)
     result = Expression.new([:lt,    val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 99)
+module_eval(<<'.,.,', 'kernelparser.y', 102)
   def _reduce_70(val, _values, result)
     result = Expression.new([:ge,    val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 100)
+module_eval(<<'.,.,', 'kernelparser.y', 103)
   def _reduce_71(val, _values, result)
     result = Expression.new([:le,    val[0], val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 101)
+module_eval(<<'.,.,', 'kernelparser.y', 104)
   def _reduce_72(val, _values, result)
     result = val[1]
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 102)
+module_eval(<<'.,.,', 'kernelparser.y', 105)
   def _reduce_73(val, _values, result)
     result = val[0]
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 103)
+module_eval(<<'.,.,', 'kernelparser.y', 106)
   def _reduce_74(val, _values, result)
     result = Expression.new([:uminus,val[1], nil])
     result
@@ -1082,14 +1098,14 @@ module_eval(<<'.,.,', 'kernelparser.y', 103)
 
 # reduce 75 omitted
 
-module_eval(<<'.,.,', 'kernelparser.y', 106)
+module_eval(<<'.,.,', 'kernelparser.y', 109)
   def _reduce_76(val, _values, result)
     result = Table.new(val[1])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 108)
+module_eval(<<'.,.,', 'kernelparser.y', 111)
   def _reduce_77(val, _values, result)
     result = FuncCall.new([val[0], val[2]])
     result
@@ -1098,42 +1114,42 @@ module_eval(<<'.,.,', 'kernelparser.y', 108)
 
 # reduce 78 omitted
 
-module_eval(<<'.,.,', 'kernelparser.y', 110)
+module_eval(<<'.,.,', 'kernelparser.y', 113)
   def _reduce_79(val, _values, result)
     result = val[0] + val[2]
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 111)
+module_eval(<<'.,.,', 'kernelparser.y', 114)
   def _reduce_80(val, _values, result)
     result = [val[0]]
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 113)
+module_eval(<<'.,.,', 'kernelparser.y', 116)
   def _reduce_81(val, _values, result)
     result = val[0]
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 114)
+module_eval(<<'.,.,', 'kernelparser.y', 117)
   def _reduce_82(val, _values, result)
     result = Expression.new([:dot,val[0],val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 115)
+module_eval(<<'.,.,', 'kernelparser.y', 118)
   def _reduce_83(val, _values, result)
     result = Expression.new([:dot,val[0],val[2]])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 116)
+module_eval(<<'.,.,', 'kernelparser.y', 119)
   def _reduce_84(val, _values, result)
     result = Expression.new([:array,val[0],val[2]])
     result
@@ -1142,63 +1158,63 @@ module_eval(<<'.,.,', 'kernelparser.y', 116)
 
 # reduce 85 omitted
 
-module_eval(<<'.,.,', 'kernelparser.y', 119)
+module_eval(<<'.,.,', 'kernelparser.y', 122)
   def _reduce_86(val, _values, result)
     result = IntegerValue.new(val[0])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 120)
+module_eval(<<'.,.,', 'kernelparser.y', 123)
   def _reduce_87(val, _values, result)
     result = IntegerValue.new(val[0]+val[1])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 121)
+module_eval(<<'.,.,', 'kernelparser.y', 124)
   def _reduce_88(val, _values, result)
     result = IntegerValue.new(val[0]+val[1])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 122)
+module_eval(<<'.,.,', 'kernelparser.y', 125)
   def _reduce_89(val, _values, result)
     result = IntegerValue.new(val[0]+val[1])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 123)
+module_eval(<<'.,.,', 'kernelparser.y', 126)
   def _reduce_90(val, _values, result)
     result = IntegerValue.new(val[0]+val[1])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 124)
+module_eval(<<'.,.,', 'kernelparser.y', 127)
   def _reduce_91(val, _values, result)
     result = IntegerValue.new(val[0]+val[1])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 125)
+module_eval(<<'.,.,', 'kernelparser.y', 128)
   def _reduce_92(val, _values, result)
     result = FloatingPoint.new(val[0]+val[1]+val[2])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 126)
+module_eval(<<'.,.,', 'kernelparser.y', 129)
   def _reduce_93(val, _values, result)
     result = FloatingPoint.new(val[0]+val[1]+val[2]+val[3])
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'kernelparser.y', 127)
+module_eval(<<'.,.,', 'kernelparser.y', 130)
   def _reduce_94(val, _values, result)
     result = FloatingPoint.new(val[0]+val[1]+val[2]+val[3])
     result

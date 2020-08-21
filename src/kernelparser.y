@@ -76,7 +76,6 @@ class KernelParser
             | "else" EOL             {result = [IfElseState.new([:else,nil])]}
             | "elsif" expression EOL {result = [IfElseState.new([:elsif,val[1]])]}
             | "endif" EOL            {result = [IfElseState.new([:endif,nil])]}
-
   pragma: "#pragma" TEXT {result = Pragma.new([val[1],nil])}
         | "#pragma" TEXT options {result = Pragma.new([val[1],val[2]])}
   options: option { result = val[0]}
@@ -127,6 +126,8 @@ class KernelParser
 	| DEC '.' DEC "f" {result = FloatingPoint.new(val[0]+val[1]+val[2]+val[3])}
         | DEC '.' DEC "h" {result = FloatingPoint.new(val[0]+val[1]+val[2]+val[3])}
 
+
+
 end
 
 ---- header
@@ -166,9 +167,9 @@ def parse(filename)
   open(filename){ |f|
     count = 0
     f.each_line{|str|
-      a=str.chomp.split(/(\s|:|\=\=|\!\=|\+\=|-\=|\*\=|\&\&|\|\||\&|\||\+|-|\*|\/|\=|\(|\)|,|\.|>\=|<\=|>|<|\[|\]|;|~|\^)/).select{|s| s=~/\S+/}
-      symbols = /(\=\=|\!\=|\&\&|\|\||\&|\||\+|-|\*|\/|\(|\)|,|\.|>\=|<\=|>|<|\[|\]|\{|\})/
-      if a == []
+      a=str.chomp.split(/(\/\/|\s|:|\=\=|\!\=|\+\=|-\=|\*\=|\&\&|\|\||\&|\||\+|-|\*|\/|\=|\(|\)|,|\.|>\=|<\=|>|<|\[|\]|;|~|\^)/).select{|s| s=~/\S+/}
+      symbols = /^(\=\=|\!\=|\&\&|\|\||\&|\||\+|-|\*|\/|\(|\)|,|\.|>\=|<\=|>|<|\[|\]|\{|\})$/
+      if a == [] || a[0] == "//"
         next
       end
       count += 1
@@ -202,6 +203,8 @@ def parse(filename)
             @q << [',', x]
           elsif x  == ')'
             @q << [')', x]
+	  elsif x == "//"
+	       break
           else
             @q << [:IDENT, x]
           end
@@ -213,6 +216,8 @@ def parse(filename)
             @q << [x, x]
 	  elsif x =~ /^\d+(f|h|s|l|u|us|ul)?$/
             @q << [:DEC, x]
+	  elsif x == "//"
+		break
           else
             @q << [:IDENT, x]
           end
@@ -223,7 +228,12 @@ def parse(filename)
         #p a
         @q << ["#pragma",a.shift]
         a.each{|x|
-	  @q << [:TEXT,x]
+	  if x == "//"
+	       break
+	  else
+	    @q << [:TEXT,x]
+          end
+	       
         }
       elsif a[0] == "if"
         @q << ["if","if"]
@@ -233,6 +243,8 @@ def parse(filename)
 	    @q << [x,x]
 	  elsif x =~ /^\d+(f|h|s|l|u|us|ul)?$/
             @q << [:DEC, x]
+	  elsif x == "//"
+	    break
           else
             @q << [:IDENT, x]
 	  end
@@ -245,6 +257,8 @@ def parse(filename)
 	    @q << [x,x]
 	  elsif x =~ /^\d+(f|h|s|l|u|us|ul)?$/
 	    @q << [:DEC, x]
+	  elsif x == "//"
+	    break
 	  else
             @q << [:IDENT, x]
 	  end
@@ -264,10 +278,12 @@ def parse(filename)
             @q << [x,x]
 	  elsif x =~/^\d+(f|h|s|l|u|us|ul)?$/
             @q << [:DEC,x]
+          elsif x == "//"
+	    break   
           else
             @q << [:IDENT,x]
           end
-        }
+	}
       elsif a[3] =~ /(\=|\+\=|-\=)/
         #print "statement \n"
         @q << [:IDENT,a.shift] # var
@@ -281,6 +297,8 @@ def parse(filename)
             @q << [x,x]
 	  elsif x =~/^\d+(f|h|s|l|u|us|ul)?$/
             @q << [:DEC,x]
+	  elsif x == "break"
+	    break
           else
             @q << [:IDENT,x]
           end
