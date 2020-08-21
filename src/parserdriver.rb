@@ -1395,7 +1395,7 @@ while true
       warn "class file: #{$epi_file}"
     end
   when "--version"
-    warn "pikg version 0.1b"
+    warn "pikg version 0.1c"
     abort
   when "--help"
     help_message = "available options:\n"
