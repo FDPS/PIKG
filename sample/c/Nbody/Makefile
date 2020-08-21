@@ -12,8 +12,8 @@ CFLAGS +=
 PIKG_OPTION= --conversion-type $(CONVERSION_TYPE) --epi-name particle --epj-name particle --force-name particle --c-interface --kernel-name calc_gravity --class-file user_defined.h
 
 # AVX2 mode
-CONVERSION_TYPE=AVX2 
-CXXFLAGS += -mavx2 -mfma -ffast-math
+#CONVERSION_TYPE=AVX2
+#CXXFLAGS += -mavx2 -mfma -ffast-math
 
 # AVX-512 mode
 #CONVERSION_TYPE=AVX-512
