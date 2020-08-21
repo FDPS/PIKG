@@ -1276,8 +1276,8 @@ class Expression
         elsif lt == "F16vec"
           type = "F16"
         else
-          warn lop
-          warn "error: #{get_name(lop.name)} is not vector type!"
+          nil[0]
+          warn "error: #{lop} is not vector type!"
           abort
         end
       elsif lop =~ /^\d+$/ && rop =~ /^\d+(f|h)?$/

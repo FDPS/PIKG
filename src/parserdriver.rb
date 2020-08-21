@@ -105,9 +105,17 @@ def generate_force_related_map(ss,h=$varhash)
     if isStatement(s)
       name = get_name(s)
       if h[name][0] == "FORCE"
-        fvars += [name] + s.expression.get_related_variable
-      elsif fvars.index(name)
-        fvars += s.expression.get_related_variable
+        fvars += [name]
+      end
+      if h[name][0] == "FORCE" || fvars.index(name)
+        rexps = s.expression.get_related_variable
+        rexps.each{ |rexp|
+          if rexp.class == Expression && rexp.operator == :dot
+            fvars += [rexp.lop]
+          else
+            fvars += [rexp]
+          end
+        }
       end
     elsif s.class == ConditionalBranch
       s.conditions.zip(s.bodies){ |c,b|
@@ -300,12 +308,12 @@ class Kernelprogram
     ret = []
     if isVector(orig)
       if !(orig.expression.class == FuncCall)
+        type = orig.get_type.split("vec")[0]
         ["x","y","z"].each{ |d|
-          val = Expression.new([:dot,orig.name,d])
+          val = Expression.new([:dot,orig.name,d,type])
           exp = vector_to_scalar(orig.expression,d)
           #p exp
-          type = orig.type.delete("vec")
-          tmp = Statement.new([val,exp])
+          tmp = Statement.new([val,exp,type,orig.op])
           tmp.type = type
           ret.push(tmp)
         }
@@ -347,7 +355,6 @@ class Kernelprogram
       end
     }
     @statements = new_s
-    #p "expanded statements:",@statements
   end
 
   def calc_max_predicate_count(ss)
