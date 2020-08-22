@@ -276,7 +276,11 @@ def get_simd_width(conversion_type)
 end
 
 def get_num_elem(type,conversion_type)
-  get_simd_width(conversion_type) / get_single_data_size(type)
+  if conversion_type == "reference"
+    1
+  else
+    get_simd_width(conversion_type) / get_single_data_size(type)
+  end
 end
 
 def get_byte_size(type)
