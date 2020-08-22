@@ -673,8 +673,9 @@ class String
   end
 end
 
-def aos2soa_simd(fvars,h=$varhash)
+def aos2soa_simd(fvars,coversion_type,n,h=$varhash)
   ret = []
+
   # count bytes of EPI and FORCE member variable
   epi_tot, epi_max_byte_size, is_epi_uniform = count_class_member("EPI")
   force_tot, force_max_byte_size, is_force_uniform = count_class_member("FORCE")
@@ -726,25 +727,6 @@ def aos2soa_simd(fvars,h=$varhash)
           }
         end
       }
-#      fvars.each{ |v|
-#        if h[v][0] == io
-#          type_single = get_single_element_type(type)
-#          vdim = get_vector_dim(h[v][1])
-#          p v
-#          p count
-#          if vdim > 1
-#            for i in 0...vdim
-#              dest = Expression.new([:dot,v,["x","y","z","w"][i],type_single])
-#              src  = Expression.new([:dot,vname,["v0","v1","v2","v3"][i+count],type_single])
-#              ret += [Statement.new([dest,src,type_single])]
-#            end
-#            count += vdim
-#          else
-#            ret += [Statement.new([v,Expression.new([:dot,vname,"v#{count}",type_single]),type_single])]
-#            count += 1
-#          end
-#        end
-#      }
     else # is not uniform
       fvars.each{ |v|
         name = v
