@@ -1,3 +1,81 @@
+def get_initial_value(op,type)
+  if op == :plus || op == :minus
+    case type
+    when /(S|U)/
+    #IntegerValue.new("0")
+      "0"
+    when "F64"
+    #FloatingPoint.new("0.0")
+      "0.0"
+    when "F32"
+      #FloatingPoint.new("0.0f")
+      "0.0f"
+    when "F16"
+      #FloatingPoint.new("0.0h")
+      "0.0h"
+    end
+  elsif op == :mult || op == :div
+    case type
+    when /(S|U)/
+      #IntegerValue.new("1")
+      "1"
+    when "F64"
+      #FloatingPoint.new("1.0")
+      "1.0"
+    when "F32"
+      #FloatingPoint.new("1.0f")
+      "1.0f"
+    when "F16"
+      #FloatingPoint.new("1.0h")
+      "1.0h"
+    end
+  elsif op == "max"
+    case type
+    when "S64"
+      "std::numeric_limits<int64_t>::lowest()"
+    when "S32"
+      "std::numeric_limits<int32_t>::lowest()"
+    when "S16"
+      "std::numeric_limits<int16_t>::lowest()"
+    when "U64"
+      "std::numeric_limits<uint64_t>::lowest()"
+    when "U32"
+      "std::numeric_limits<uint32_t>::lowest()"
+    when "U16"
+      "std::numeric_limits<uint16_t>::lowest()"
+    when "F64"
+      "std::numeric_limits<float64_t>::lowest()"
+    when "F64"
+      "std::numeric_limits<float32_t>::lowest()"
+    when "F64"
+      "std::numeric_limits<float16_t>::lowest()"
+    end
+  elsif op == "min"
+    case type
+    when "S64"
+      "std::numeric_limits<int64_t>::max()"
+    when "S32"
+      "std::numeric_limits<int32_t>::max()"
+    when "S16"
+      "std::numeric_limits<int16_t>::max()"
+    when "U64"
+      "std::numeric_limits<uint64_t>::max()"
+    when "U32"
+      "std::numeric_limits<uint32_t>::max()"
+    when "U16"
+      "std::numeric_limits<uint16_t>::max()"
+    when "F64"
+      "std::numeric_limits<float64_t>::max()"
+    when "F64"
+      "std::numeric_limits<float32_t>::max()"
+    when "F64"
+      "std::numeric_limits<float16_t>::max()"
+    end
+  else
+    abort "unsupported accumulate operator #{op} for get_initial_value"
+  end
+end
+
 def get_iotype_from_hash(v)
   v[1][0]
 end
@@ -19,6 +97,8 @@ def get_vector_elements(type)
     ["x","y","z"]
   when /F(16|32|64)vec4/
     ["x","y","z","w"]
+  else
+    [""]
   end
 end
 
@@ -352,6 +432,6 @@ def count_class_member(io,h=$varhash)
       is_uniform = false if prev_type != nil && type.delete("vec") != prev_type
     end
   }
-  warn "size of #{io} member is #{max_byte_size}, # of elemennts are #{tot/max_byte_size}" if is_uniform
+  #warn "size of #{io} member is #{max_byte_size}, # of elemennts are #{tot/max_byte_size}" if is_uniform
   [tot,max_byte_size,is_uniform]
 end
