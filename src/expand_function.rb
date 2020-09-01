@@ -80,6 +80,28 @@ class FuncCall
       #s_tmp.each{ |s| p s}
 
       statements += s_tmp
+    elsif @name =~ /to_(f|s|u)(64|32|16)/
+      type_to = self.get_type
+      type_from = @ops[0].get_type
+      size_to = get_single_data_size(type_to)
+      size_from = get_single_data_size(type_from)
+      #p size_to,size_from
+
+      if size_to == size_from
+        # p "do nothing -> remove func call"
+        ret = @ops[0]
+      else
+        n = size_from / size_to
+        # p "down cast -> fission"
+        tmp0 = add_new_tmpvar(type_from)
+        statements += [Statement.new([tmp0,@ops[0],type_from,nil])]
+        tmp1 = add_new_tmpvar(type_to)
+        statements += [Statement.new([tmp1,FuncCall.new([@name,[tmp0],type_to])])]
+        ret = tmp1
+      end
+      #p "expand_function:"
+      #p self
+      #p ret,statements
     end
     [ret,statements]
   end
