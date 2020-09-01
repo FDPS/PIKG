@@ -119,6 +119,16 @@ class Kernelprogram
     code += "return rinv;\n"
     code += "}\n"
 
+    code += "svfloat64_t rsqrt(svbool_t pg,svfloat64_t op){\n"
+    code += "svfloat64_t rinv = svrsqrte_f64(op);\n"
+    code += "svfloat64_t h = svmul_f64_z(pg,op,rinv);\n"
+    code += "h = svmsb_n_f64_z(pg,h,rinv,1.f);\n"
+    code += "svfloat64_t poly = svmad_n_f64_z(pg,h,svdup_f64(0.375f),0.5f);\n"
+    code += "poly = svmul_f64_z(pg,poly,h);\n"
+    code += "rinv = svmad_f64_z(pg,rinv,poly,rinv);\n"
+    code += "return rinv;\n"
+    code += "}\n"
+
     code += "svfloat32x2_t svdup_n_f32x3(PIKG::F32vec2 v){\n"
     code += "  svfloat32x2_t ret;\n"
     code += "  ret.v0 = svdup_n_f32(v.x);\n  ret.v1 = svdup_n_f32(v.y);\n"
@@ -129,13 +139,30 @@ class Kernelprogram
     code += "  ret.v0 = svdup_n_f32(v.x);\n  ret.v1 = svdup_n_f32(v.y);\n  ret.v2 = svdup_n_f32(v.z);\n"
     code += "  return ret;\n"
     code +="}\n"
-    #code += "svfloat32x4_t svdup_n_f32x3(PIKG::F32vec4 v){\n"
-    #code += "  svfloat32x4_t ret;\n"
-    #code += "  ret.v0 = svdup_n_f32(v.x);\n  ret.v1 = svdup_n_f32(v.y);\n  ret.v2 = svdup_n_f32(v.z);\n  ret.v3 = svdup_n_f32(v.w);\n"
-    #code += "  return ret;\n"
-    #code +="}\n"
+    code += "svfloat32x4_t svdup_n_f32x4(PIKG::F32vec4 v){\n"
+    code += "  svfloat32x4_t ret;\n"
+    code += "  ret.v0 = svdup_n_f32(v.x);\n  ret.v1 = svdup_n_f32(v.y);\n  ret.v2 = svdup_n_f32(v.z);\n  ret.v3 = svdup_n_f32(v.w);\n"
+    code += "  return ret;\n"
+    code +="}\n"
+
+    code += "svfloat64x2_t svdup_n_f64x3(PIKG::F64vec2 v){\n"
+    code += "  svfloat64x2_t ret;\n"
+    code += "  ret.v0 = svdup_n_f64(v.x);\n  ret.v1 = svdup_n_f64(v.y);\n"
+    code += "  return ret;\n"
+    code +="}\n"
+    code += "svfloat64x3_t svdup_n_f64x3(PIKG::F64vec v){\n"
+    code += "  svfloat64x3_t ret;\n"
+    code += "  ret.v0 = svdup_n_f64(v.x);\n  ret.v1 = svdup_n_f64(v.y);\n  ret.v2 = svdup_n_f64(v.z);\n"
+    code += "  return ret;\n"
+    code +="}\n"
+    code += "svfloat64x4_t svdup_n_f64x4(PIKG::F64vec4 v){\n"
+    code += "  svfloat64x4_t ret;\n"
+    code += "  ret.v0 = svdup_n_f64(v.x);\n  ret.v1 = svdup_n_f64(v.y);\n  ret.v2 = svdup_n_f64(v.z);\n  ret.v3 = svdup_n_f64(v.w);\n"
+    code += "  return ret;\n"
+    code +="}\n"
 
     code += "svfloat32_t sqrt(svbool_t pg,svfloat32_t op){ return svsqrt_f32_z(pg,op); }\n"
+    code += "svfloat64_t sqrt(svbool_t pg,svfloat32_t op){ return svsqrt_f64_z(pg,op); }\n"
     # http://math-koshimizu.hatenablog.jp/entry/2017/07/28/083000
     code += "svfloat32_t inv(svbool_t pg,svfloat32_t op){\n"
     code += "svfloat32_t x1 = svrecpe_f32(op);\n"
@@ -145,6 +172,16 @@ class Kernelprogram
     code += "ret = svmul_f32_z(pg,ret,x2);\n"
     code += "return ret;\n"
     code += "}\n"
+
+    code += "svfloat64_t inv(svbool_t pg,svfloat64_t op){\n"
+    code += "svfloat64_t x1 = svrecpe_f64(op);\n"
+    code += "svfloat64_t x2 = svmsb_n_f64_z(pg,op,x1,2.f);\n"
+    code += "x2 = svmul_f64_z(pg,x2,x1);\n"
+    code += "svfloat64_t ret = svmsb_n_f64_z(pg,op,x2,2.f);\n"
+    code += "ret = svmul_f64_z(pg,ret,x2);\n"
+    code += "return ret;\n"
+    code += "}\n"
+
     code += "svfloat64_t max(svbool_t pg,svfloat64_t a,svfloat64_t b){ return svmax_f64_z(pg,a,b);}\n"
     code += "svfloat64_t min(svbool_t pg,svfloat64_t a,svfloat64_t b){ return svmin_f64_z(pg,a,b);}\n"
     code += "svuint64_t max(svbool_t pg,svuint64_t a,svuint64_t b){ return svmax_u64_z(pg,a,b);}\n"
@@ -673,7 +710,7 @@ class String
   end
 end
 
-def aos2soa_simd(fvars,coversion_type,n,h=$varhash)
+def aos2soa_simd(fvars,coversion_type,h=$varhash)
   ret = []
 
   # count bytes of EPI and FORCE member variable
