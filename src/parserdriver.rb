@@ -7,13 +7,14 @@ require_relative "reduce_madd.rb"
 require_relative "loop_fission.rb"
 require_relative "software_pipelining.rb"
 require_relative "gen_hash.rb"
+require_relative "kernel_body_multi_prec.rb"
 
 require_relative "A64FX.rb"
 require_relative "AVX-512.rb"
 require_relative "AVX2.rb"
 
 $dimension = 3
-$reserved_function = ["rsqrt","sqrt","inv","max","min","madd","msub","nmadd","nmsub","table","to_int","to_uint","to_float"]
+$reserved_function = ["rsqrt","sqrt","inv","max","min","madd","msub","nmadd","nmsub","table","to_int","to_uint","to_float","to_f16","to_f32","to_f64","to_f16vec","to_f32vec","to_f64vec","to_f16vec2","to_f32vec2","to_f64vec2","to_f16vec3","to_f32vec3","to_f64vec3","to_f16vec4","to_f32vec4","to_f64vec4","to_s16","to_s32","to_s64","to_u16","to_u32","to_u64"]
 $tmp_val_count = 0
 
 $iotypes = ["EPI","EPJ","FORCE","MEMBER","TABLE"]
@@ -125,6 +126,39 @@ def generate_force_related_map(ss,h=$varhash)
     end
   }
   fvars.sort.uniq
+end
+
+def generate_epj_related_map(ss,h=$varhash)
+  jvars = []
+  ss.each{ |s|
+    if isStatement(s)
+      name = get_name(s)
+      rexps = s.expression.get_related_variable
+      rexps.each{ |rexp|
+        if h[rexp][0] == "EPJ" || jvars.index(rexp)
+          jvars += [name]
+        end
+      }
+    elsif s.class == ConditionalBranch
+      s.conditions.zip(s.bodies){ |c,b|
+        rexps = c.get_related_variable
+        all = false
+        rexps.each{ |rexp|
+          if h[rexp][0] == "EPJ" || jvars.index(rexp)
+            all = true
+          end
+        }
+        if all
+          b.each{ |s|
+            jvars += [get_name(s)]
+          }
+        else
+          jvars += generate_epj_related_map(b,h)
+        end
+      }
+    end
+  }
+  jvars.sort.uniq
 end
 
 class Kernelprogram
@@ -453,6 +487,7 @@ class Kernelprogram
         for i in 0...$max_pg_count
           code += "svbool_t pg#{i};\n"
         end
+        p code
       elsif conversion_type =~ /AVX2/
       elsif conversion_type =~ /AVX-512/
       end
@@ -499,6 +534,17 @@ class Kernelprogram
     code += "PIKG::S32   to_int(PIKG::F32 op){return (PIKG::S32)op;}\n"
     code += "PIKG::U64  to_uint(PIKG::F64 op){return (PIKG::U64)op;}\n"
     code += "PIKG::U32  to_uint(PIKG::F32 op){return (PIKG::U32)op;}\n"
+
+    
+    code += "template<typename T> PIKG::F64 to_f64(const T& op){return (PIKG::F64)op;}"
+    code += "template<typename T> PIKG::F32 to_f32(const T& op){return (PIKG::F32)op;}"
+    #code += "template<typename T> PIKG::F16 to_f16(const T& op){return (PIKG::F16)op;}"
+    code += "template<typename T> PIKG::S64 to_s64(const T& op){return (PIKG::S64)op;}"
+    code += "template<typename T> PIKG::S32 to_s32(const T& op){return (PIKG::S32)op;}"
+    #code += "template<typename T> PIKG::S16 to_s16(const T& op){return (PIKG::S16)op;}"
+    code += "template<typename T> PIKG::U64 to_u64(const T& op){return (PIKG::U64)op;}"
+    code += "template<typename T> PIKG::U32 to_u32(const T& op){return (PIKG::U32)op;}"
+    #code += "template<typename T> PIKG::U16 to_u16(const T& op){return (PIKG::U16)op;}"
 
     #code += "PIKG::F64 table(const PIKG::F64 tab[],const PIKG::U32 index){ return tab[index];);\n"
     #code += "PIKG::F32 table(const PIKG::F32 tab[],const PIKG::U32 index){ return tab[index];);\n"
@@ -632,6 +678,19 @@ class Kernelprogram
   
   def kernel_body(conversion_type,istart=0,h=$varhash)
     code = ""
+    if conversion_type =~ /(A64FX|AVX)/
+      $pg_count = 0
+      $current_predicate = "pg#{$pg_count}"
+      $max_pg_count = calc_max_predicate_count(@statements)
+      if conversion_type =~ /A64FX/
+        for i in 0...$max_pg_count
+          code += "svbool_t pg#{i};\n"
+        end
+      elsif conversion_type =~ /AVX2/
+      elsif conversion_type =~ /AVX-512/
+      end
+    end
+
     ret = []
     ret.push(NonSimdDecl.new(["S32","i"])) if istart != nil
     ret.push(NonSimdDecl.new(["S32","j"]))
@@ -879,6 +938,7 @@ class Kernelprogram
   def generate_optimized_code(conversion_type,output=$output_file)
     code = "#include<pikg_vector.hpp>\n"
     code +="#include<cmath>\n"
+    code +="#include<limits>\n"
     code += $additional_text if $additional_text != nil
     code += "\n"
     case conversion_type
@@ -1131,7 +1191,114 @@ class Kernelprogram
   end
 
   def make_conditional_branch_block(h = $varhash)
-    @statements = make_conditional_branch_block_recursive2(@statements,h)
+    @statements = make_conditional_branch_block_recursive3(@statements,h)
+  end
+
+  def make_conditional_branch_block_recursive3(ss,h = $varhash,related_vars = [])
+    ret = Array.new
+    nest_level = 0
+    cbb = nil
+    ss.reverse_each{ |s|
+      if nest_level == 0
+        if s.class == IfElseState && s.operator == :endif
+          cbb = ConditionalBranch.new([[],[]])
+          cbb.init_new_body
+        else
+          if isStatement(s)
+            name = get_name(s)
+            if related_vars.index(s) || (h[s] != nil && h[s][0] == "FORCE")
+              related_vars.push(get_name(s))
+              related_vars += s.expression.get_related_variable
+            end
+          else
+            related_vars += s.expression.get_related_variable
+          end
+          related_vars.sort!.uniq!
+
+          ret.push(s)
+        end
+      elsif nest_level == 1
+        if s.class == IfElseState
+          case s.operator
+          when :if
+            cbb.push_condition(s)
+          when :elsif
+            cbb.push_condition(s)
+            cbb.init_new_body
+          when :else
+            cbb.push_condition(s)
+            cbb.init_new_body
+          when :endif
+            cbb.push_body(s)
+          end
+        else
+          cbb.push_body(s)
+        end
+      else
+        cbb.push_body(s)
+      end
+
+      nest_level += 1 if s.class == IfElseState && s.operator == :endif
+      if s.class == IfElseState && s.operator == :if
+        if nest_level == 1
+          new_b = []
+          new_c = []
+          cbb.bodies.reverse_each{ |b|
+            b.reverse!
+            new_b.push(make_conditional_branch_block_recursive3(b,h,related_vars))
+          }
+          cbb.conditions.reverse_each{ |c|
+            new_c.push(c)
+          }
+          cbb.bodies = new_b
+          cbb.conditions.reverse!
+
+          ret.push(cbb)
+
+          # make tmp var hash
+          tmp_name_hash = Hash.new()
+          merge_state = []
+          cbb.bodies.each{ |bss|
+            bss.each { |bs|
+              if isStatement(bs) && bs.expression.class != Merge
+                name = get_name(bs)
+                tail = get_tail(bs)
+                if related_vars.find(){ |n| n == name } || h[name][0] == "FORCE"
+                  tmp_name_hash[name] = add_new_tmpvar(bs.type) if tmp_name_hash[name] == nil
+                  if ["x","y","z","w"].index(tail)
+                    src = Expression.new([:dot,tmp_name_hash[name],tail,bs.type])
+                    dst = Expression.new([:dot,name,tail,bs.type])
+                    bss.push(Statement.new([dst,Merge.new([src,dst,bs.type]),bs.type]))
+                  else
+                    bss.push(Statement.new([name,Merge.new([tmp_name_hash[name],name,bs.type]),bs.type]))
+                  end
+                end
+              end
+            }
+          }
+          #p tmp_name_hash
+          cbb.bodies.each{  |bss|
+            computed_list = []
+            replaced_list = []
+            bss.each{ |bs|
+              if isStatement(bs) && bs.expression.class != Merge
+                name = get_name(bs)
+                bs.replace_name(name,tmp_name_hash[name]) if tmp_name_hash[name] != nil
+                bs.expression.replace_by_list(computed_list,replaced_list)
+                if tmp_name_hash[name] != nil
+                  computed_list.push(bs.name)
+                  replaced_list.push(tmp_name_hash[name])
+                end
+              end
+            }
+          }
+          cbb = nil
+        end
+        nest_level -= 1
+      end
+      abort "nest_level < 0" if nest_level < 0
+    }
+    ret.reverse
   end
 
   def make_conditional_branch_block_recursive2(ss,h = $varhash,related_vars = [])
@@ -1170,29 +1337,36 @@ class Kernelprogram
           cbb.bodies = new_b
           cbb.conditions.reverse!
 
-          new_s.push(cbb)
-
-          # make tmp var hash
+         # make tmp var hash
           tmp_name_hash = Hash.new()
           merge_state = []
+          tmp_cbb = ConditionalBranch.new([[],[]])
+          tmp_cbb.conditions = cbb.conditions
           cbb.bodies.each{ |bss|
+            tmp_bss = Array.new
             bss.each { |bs|
+              tmp_bss.push(bs)
               if isStatement(bs) && bs.expression.class != Merge
                 name = get_name(bs)
                 tail = get_tail(bs)
                 if related_vars.find(){ |n| n == name } || h[name][0] == "FORCE"
                   tmp_name_hash[name] = add_new_tmpvar(bs.type) if tmp_name_hash[name] == nil
+                  tmp_bss = [Statement.new([tmp_name_hash[name],name,h[name][1],nil])] + tmp_bss
+                  #p bss
                   if ["x","y","z","w"].index(tail)
-                    src = Expression.new([:dot,tmp_name_hash[name],tail,bs.type])
-                    dst = Expression.new([:dot,name,tail,bs.type])
-                    bss.push(Statement.new([dst,Merge.new([src,dst,bs.type]),bs.type]))
+                    dst = Expression.new([:dot,tmp_name_hash[name],tail,bs.type])
+                    src = Expression.new([:dot,name,tail,bs.type])
+                    tmp_bss.push(Statement.new([dst,Merge.new([src,dst,bs.type]),bs.type]))
                   else
-                    bss.push(Statement.new([name,Merge.new([tmp_name_hash[name],name,bs.type]),bs.type]))
+                    tmp_bss.push(Statement.new([name,Merge.new([name,tmp_name_hash[name],bs.type]),bs.type]))
                   end
                 end
               end
             }
+            tmp_cbb.bodies.push(tmp_bss)
           }
+          cbb = tmp_cbb
+          new_s.push(cbb)
           #p tmp_name_hash
           cbb.bodies.each{  |bss|
             computed_list = []
@@ -1200,8 +1374,8 @@ class Kernelprogram
             bss.each{ |bs|
               if isStatement(bs) && bs.expression.class != Merge
                 name = get_name(bs)
-                bs.replace_name(name,tmp_name_hash[name]) if tmp_name_hash[name] != nil
-                bs.expression.replace_by_list(computed_list,replaced_list)
+                #bs.replace_name(name,tmp_name_hash[name]) if tmp_name_hash[name] != nil
+                #bs.expression.replace_by_list(computed_list,replaced_list)
                 if tmp_name_hash[name] != nil
                   computed_list.push(bs.name)
                   replaced_list.push(tmp_name_hash[name])
@@ -1460,6 +1634,8 @@ end
 src = ""
 program=parser.parse(filename)
 $varhash = Hash.new
+$funchash = Hash.new
+program.process_funcdecl($funchash)
 if $epi_file != nil && $epj_file != nil && $force_file != nil
   ["EPI","EPJ","FORCE"].each{ |iotype|
     class_file, class_name = [[$epi_file,$epi_name],[$epi_file,$epj_name],[$force_file,$force_name]][["EPI","EPJ","FORCE"].index(iotype)]
@@ -1474,13 +1650,13 @@ if $epi_file != nil && $epj_file != nil && $force_file != nil
   program.generate_alias($varhash)
 else
   program.process_iodecl($varhash)
-  program.process_funcdecl($varhash)
 end
 program.check_references($varhash)
 
 program.generate_hash("noconversion")
 
 program.expand_function
+#program.statements.each{ |s| p s }
 program.expand_tree
 program.make_conditional_branch_block
 program.disassemble_statement
@@ -1489,7 +1665,12 @@ program.generate_fortran_module if $fortran_interface
 if $is_multi_walk
   program.generate_optimized_code_multi_walk($conversion_type);
 else
-  program.generate_optimized_code($conversion_type)
+  case $conversion_type
+  when "A64FX"
+    program.generate_optimized_code($conversion_type)
+  else
+    program.generate_optimized_code_multi_prec($conversion_type)
+  end
 end
 
 __END__
