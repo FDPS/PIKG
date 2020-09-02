@@ -16,15 +16,15 @@ class Load
     offset_gather = ((tot+max_byte_size-1)/max_byte_size * max_byte_size) / byte_count(type_single)
     case conversion_type
     when "reference"
-      get_vector_elements(@type){ |dim|
+      get_vector_elements(@type).each{ |dim|
         src = @src
         src = Expression.new([:dot,src,dim,get_single_element_type(@type)]) if dim != ""
-        src = src.replace_recursive(dim,dim)
-        
+
         dest = @dest
         dest = Expression.new([:dot,dest,dim,get_single_element_type(@type)]) if dim != ""
         ret += Statement.new([dest,src,@type,nil]).convert_to_code(conversion_type)
       }
+
     when "AVX2"
       case nlane
       when lane_size
@@ -103,14 +103,18 @@ class Accumulate
 
     case conversion_type
     when "reference"
-      get_vector_elements(@type){ |dim|
+      get_vector_elements(@type).each{ |dim|
         dest = @dest
         dest = Expression.new([:dot,dest,dim,get_single_element_type(@type)]) if dim != ""
-        dest = src.replace_recursive(dim,dim)
-       
+        p dest       
         src = @src
         src = Expression.new([:dot,src,dim,get_single_element_type(@type)]) if dim != ""
-        ret += Statement.new([dest,src,@type,nil]).convert_to_code(conversion_type)
+        if @op == "max" || @op == "min"
+          
+        else
+          ret += Statement.new([dest,src,@type,:plus]).convert_to_code(conversion_type) if @op == :plus || @op == :minus
+          ret += Statement.new([dest,src,@type,:mult]).convert_to_code(conversion_type) if @op == :mult || @op == :div
+        end
       }
     when "AVX2"
       case nlane
@@ -238,8 +242,8 @@ class TailJLoop
           imm8 = "0b00000001" if type_single =~ /64/
           imm8 = "0b00000011" if type_single =~ /32/
         when 8
-          abort "j_parallel of F64 must be <= 4" if type_Single == /64/
-          imm8 = "0b00000001" if type_single =~ "F32"
+          abort "j_parallel of F64 must be <= 4" if type_single == /64/
+          imm8 = "0b00000001" if type_single == "F32"
         end
         for i in 0...n_split
           get_vector_elements(type).each{ |dim|
@@ -370,18 +374,6 @@ class Kernelprogram
       }
     end
 
-    code += kernel_class_def(conversion_type)
-    case conversion_type
-    when "reference"
-      code += "Kernel_I1_J1(epi,ni,epj,nj,force);\n"
-    when "AVX2"
-      code += "Kernel_I4_J1(epi,ni,epj,nj,force);\n"
-    when "AVX-512"
-      code += "Kernel_I8_J1(epi,ni,epj,nj,force);\n"
-    else
-      abort "unsupported coversion_type #{conversion_type} for generate_optimized_code_multi_prec"
-    end
-    code += "} // operator() definition \n"
 
     fvars = generate_force_related_map(@statements)
     # calc lane_size
@@ -398,7 +390,7 @@ class Kernelprogram
     ni = 1 if ni <= 0
     nj = 1
     ninj_set.push([ni,nj])
-    ninj_set.push([nj,ni])
+    ninj_set.push([nj,ni]) if ni > 1
     #while ni > 0
     #  ninj_set += [[ni,nj]]
     #  ni /= 2
@@ -406,6 +398,11 @@ class Kernelprogram
     #  #abort "ni(#{ni}) * nj(#{nj}) != lane_size(#{lane_size})" if ni*nj != lane_size
     #end
     #p ninj_set
+
+    code += kernel_class_def(conversion_type)
+    code += "Kernel_I#{ninj_set[0][0]}_J#{ninj_set[0][1]}(epi,ni,epj,nj,force);\n"
+    code += "} // operator() definition \n"
+
     ninj_set.each{|ninj|
       $varhash.each{|v|
         iotype   = v[1][0]
@@ -974,9 +971,6 @@ class Kernelprogram
 
     jvars = generate_epj_related_map(@statements)
     fvars = generate_force_related_map(@statements)
-    p conversion_type
-    p $min_element_size
-    p get_simd_width(conversion_type)
     lane_size = get_simd_width(conversion_type) / $min_element_size
     lane_size = 1 if lane_size == 0
 
@@ -999,6 +993,7 @@ class Kernelprogram
     #iloop.statements += load_ivars(conversion_type,lane_size,lane_size/ninj[0],fvars)
     # load EPI and FORCE variable
     iloop.statements += load_vars("EPI",fvars,ninj[0],conversion_type)
+
     #iloop.statements += load_vars("FORCE",fvars,ninj[0],conversion_type)
     iloop.statements += init_force(fvars,accum_hash,conversion_type)
 
