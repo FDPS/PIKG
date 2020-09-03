@@ -443,9 +443,10 @@ class Kernelprogram
       end
     }
     code += "}\n"
-    
+
+    code += "int kernel_id = 0;\n"
     code += "void operator()"
-    code += "(const #{$epi_name}* __restrict__ epi,const int ni,const #{$epj_name}* __restrict__ epj,const int nj,#{$force_name}* __restrict__ force){\n"
+    code += "(const #{$epi_name}* __restrict__ epi,const int ni,const #{$epj_name}* __restrict__ epj,const int nj,#{$force_name}* __restrict__ force,const int kernel_select = -1){\n"
     if conversion_type =~ /(A64FX|AVX)/
       $pg_count = 0
       $current_predicate = "pg#{$pg_count}"
@@ -906,6 +907,7 @@ class Kernelprogram
     code = "#include<pikg_vector.hpp>\n"
     code +="#include<cmath>\n"
     code +="#include<limits>\n"
+    code +="#include<chrono>\n"
     code += $additional_text if $additional_text != nil
     code += "\n"
     case conversion_type

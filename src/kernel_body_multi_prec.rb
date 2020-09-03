@@ -394,6 +394,7 @@ end
       code = "#include<pikg_vector.hpp>\n"
       code +="#include<cmath>\n"
       code +="#include<limits>\n"
+      code +="#include<chrono>\n"
       code += $additional_text if $additional_text != nil
       code += "\n"
       case conversion_type
@@ -451,7 +452,32 @@ end
       #p ninj_set
 
       code += kernel_class_def(conversion_type)
-      code += "Kernel_I#{ninj_set[0][0]}_J#{ninj_set[0][1]}(epi,ni,epj,nj,force);\n"
+      code += "if(kernel_select>=0) kernel_id = kernel_select;\n"
+      code += "if(kernel_id == 0){\n"
+      code += "#{$force_name}* force_tmp = new #{$force_name}[ni];\n"
+      code += "std::chrono::system_clock::time_point  start, end;\n"
+      code += "double min_time = std::numeric_limits<double>::max();\n"
+      ninj_set.each_with_index{ |ninj,index|
+        code += "{ // test Kernel_I#{ninj[0]}_J#{ninj[1]}\n"
+        code += "for(int i=0;i<ni;i++) force_tmp[i] = force[i];\n"
+        code += "start = std::chrono::system_clock::now();\n"
+        code += "Kernel_I#{ninj[0]}_J#{ninj[1]}(epi,ni,epj,nj,force_tmp);\n"
+        code += "end = std::chrono::system_clock::now();\n"
+        code += "double elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();\n"
+        #code += "std::cerr << \"kerel #{index+1}: \" << elapsed << \" ns\" << std::endl;\n"
+        code += "if(min_time > elapsed){\n"
+        code += "min_time = elapsed;\n"
+        code += "kernel_id = #{index+1};\n"
+        code += "}\n"
+        code += "}\n"
+      }
+      code += "delete[] force_tmp;\n"
+      #code += "std::cerr << \"kernel \" << kernel_id << \" is selected\" << std::endl;\n"
+      code += "} // if(kernel_id == 0)\n"
+
+      ninj_set.each_with_index{ |ninj,index|
+        code += "if(kernel_id == #{index+1}) Kernel_I#{ninj[0]}_J#{ninj[1]}(epi,ni,epj,nj,force);\n"
+      }
       code += "} // operator() definition \n"
 
       ninj_set.each{|ninj|
