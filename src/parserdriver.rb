@@ -128,39 +128,6 @@ def generate_force_related_map(ss,h=$varhash)
   fvars.sort.uniq
 end
 
-def generate_epj_related_map(ss,h=$varhash)
-  jvars = []
-  ss.each{ |s|
-    if isStatement(s)
-      name = get_name(s)
-      rexps = s.expression.get_related_variable
-      rexps.each{ |rexp|
-        if h[rexp][0] == "EPJ" || jvars.index(rexp)
-          jvars += [name]
-        end
-      }
-    elsif s.class == ConditionalBranch
-      s.conditions.zip(s.bodies){ |c,b|
-        rexps = c.get_related_variable
-        all = false
-        rexps.each{ |rexp|
-          if h[rexp][0] == "EPJ" || jvars.index(rexp)
-            all = true
-          end
-        }
-        if all
-          b.each{ |s|
-            jvars += [get_name(s)]
-          }
-        else
-          jvars += generate_epj_related_map(b,h)
-        end
-      }
-    end
-  }
-  jvars.sort.uniq
-end
-
 class Kernelprogram
   def check_references(h = $varhash)
     ref_list = []

@@ -485,7 +485,7 @@ class Statement
     if @op == nil
       ret = @name.convert_to_code(conversion_type) + " = " + @expression.convert_to_code(conversion_type) + ";"
     else
-      warn "convert_to_code for non simple assigned operator is used"
+      #warn "convert_to_code for non simple assigned operator is used"
       #p self
       ret = @name.convert_to_code(conversion_type) + " = " + Expression.new([@op,@name,@expression,@type]).convert_to_code(conversion_type) + ";"
     end
@@ -848,7 +848,7 @@ class PointerOf
   def convert_to_code(conversion_type)
     case conversion_type
     when "reference"
-      ret = "#{@exp.convert_to_code("reference")}"
+      ret = @exp.convert_to_code(conversion_type)
     when /(A64FX|AVX2|AVX-512)/
       ret = "((#{get_pointer_type(@type)})&#{@exp.convert_to_code("reference")})"
     end
@@ -1300,7 +1300,7 @@ class Expression
     type=nil
     lt = lop.get_type(h)
     rt = rop.get_type(h) if rop != nil
-    abort "sigle element size of #{lop}(#{lt}) and #{rop}(#{rt}) are different" if rt != nil && get_single_data_size(lt) != get_single_data_size(rt)
+    abort "single element size of #{lop}(#{lt}) and #{rop}(#{rt}) are different" if rt != nil && get_single_data_size(lt) != get_single_data_size(rt)
     #print "derive type ", operator," ", lop," ", rop, "\n"
     #p self
     if [:plus, :minus, :mult, :div,:and,:or].index(operator)
