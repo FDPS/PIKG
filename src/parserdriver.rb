@@ -447,20 +447,6 @@ class Kernelprogram
     code += "int kernel_id = 0;\n"
     code += "void operator()"
     code += "(const #{$epi_name}* __restrict__ epi,const int ni,const #{$epj_name}* __restrict__ epj,const int nj,#{$force_name}* __restrict__ force,const int kernel_select = -1){\n"
-    if conversion_type =~ /(A64FX|AVX)/
-      $pg_count = 0
-      $current_predicate = "pg#{$pg_count}"
-      $max_pg_count = calc_max_predicate_count(@statements)
-      if conversion_type =~ /A64FX/
-        for i in 0...$max_pg_count
-          code += "svbool_t pg#{i};\n"
-        end
-        p code
-      elsif conversion_type =~ /AVX2/
-      elsif conversion_type =~ /AVX-512/
-      end
-    end
-
     code
   end
 
@@ -1384,6 +1370,7 @@ class String
     if propaties
       propaties[1]
     else
+      p h
       p h[self]
       p self
       nil[0]
