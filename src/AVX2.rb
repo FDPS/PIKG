@@ -317,11 +317,7 @@ end
 class FuncCall
   def convert_to_code_avx2(conversion_type)
     retval = @name
-    if $current_predicate != "pg0" && !(@name =~ /to_(f|s|u)(64|32|16)/)
-      retval += "_mask("
-    else
-      retval += "("
-    end
+    retval += "("
     if @ops.length > 0
       @ops.each_with_index{ |op,i|
         retval += "," if i > 0
