@@ -144,11 +144,23 @@ class Accumulate
         end
         src = @src.convert_to_code(conversion_type)
         suffix = get_type_suffix_avx2(@type)
-        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},_mm256_shuffle_#{suffix}(#{src},#{src},0b1111));\n"
-
-        ret += "#{src} = _mm256_add_#{suffix}(#{src},_mm256_shuffle_#{suffix}(#{src},#{src},0x0b0b));\n" if @type == "F32"
+        imm8 = "0b1111" if size == 64
+        imm8 = "0xb1" if size == 32
+        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},_mm256_shuffle_#{suffix}(#{src},#{src},#{imm8}));\n"
+        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},_mm256_shuffle_#{suffix}(#{src},#{src},0xee));\n" if @type == "F32"
         ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},_mm256_cast#{suffix}128_#{suffix}256(_mm256_extractf128_#{suffix}(#{src},1)));\n"
-        ret += "#{@dest.convert_to_code(conversion_type)}[0] += #{src}[0];\n"
+        dest_conv = "#{@dest.convert_to_code(conversion_type)}[0]"
+        src_conv = "#{src}[0]"
+        if op == "max" || op == "min"
+          ret += "#{dest_conv} = #{op}(#{dest_conv},#{src_conv});"
+        else
+          case op
+          when "add"
+            ret += NonSimdState.new([dest_conv,NonSimdExp.new([:plus,dest_conv,src_conv,@type]),@type,nil]).convert_to_code(conversion_type) + "\n"
+          when "mul"
+            ret += NonSimdState.new([dest_conv,NonSimdExp.new([:mult,dest_conv,src_conv,@type]),@type,nil]).convert_to_code(conversion_type) + "\n"
+          end
+        end
         ret += "}\n"
       when 1
         tmp = "__fkg_tmp_accum"
@@ -486,6 +498,7 @@ end
           v[1][0] = nil if iotype == "declared"
         }
         code += "void Kernel_I#{ninj[0]}_J#{ninj[1]}(const #{$epi_name}* __restrict__ epi,const PIKG::S32 ni,const #{$epj_name}* __restrict__ epj,const PIKG::S32 nj,#{$force_name}* __restrict__ force){\n"
+        $pg_count = 0
         code += kernel_body_multi_prec(ninj,conversion_type)
         code += "} // Kernel_I#{ninj[0]}_J#{ninj[1]} definition \n"
       }
@@ -702,6 +715,7 @@ end
           fdpsname = h[v][2]
           modifier = h[v][3]
           n = get_single_data_size(type) / $min_element_size
+          n = 1 if conversion_type == "reference"
           for i in 0...n
             name = v
             name += "_#{i}" if n > 1
@@ -763,7 +777,7 @@ end
       ret
     end
 
-    def init_force(fvars,accum_hash,coversion_type,h=$varhash)
+    def init_force(fvars,accum_hash,conversion_type,h=$varhash)
       ret = Array.new
       fvars.each{ |v|
         iotype = h[v][0]
@@ -772,15 +786,16 @@ end
           fdpsname = h[v][2]
           type_single = get_single_element_type(type)
           n = get_single_data_size(type) / $min_element_size
+          n = 1 if conversion_type == "reference"
           for i in 0...n
             name = v
             name += "_#{i}" if n > 1
             ret += [Declaration.new([type,name])]
-            get_vector_elements(type).each_with_index{ |dim,i|
+            get_vector_elements(type).each_with_index{ |dim,j|
               dest = name
               dest = Expression.new([:dot,dest,dim,type_single]) if dim != ""
-
-              op = accum_hash[v][i]
+              op = accum_hash[v][j]
+              abort "accum_hash == nil" if accum_hash[v][j] == nil
               ret += [Duplicate.new([dest,get_initial_value(op,type_single),type_single])]
             }
             h[name] = [iotype,type,fdpsname,"alias"] if h[name] == nil
@@ -799,6 +814,7 @@ end
           fdpsname = h[v][2]
           modifier = h[v][3]
           n = get_single_data_size(type) / $min_element_size
+          n = 1 if conversion_type == "reference"
           for i in 0...n
             name = v
             name += "_#{i}" if n > 1
@@ -822,175 +838,136 @@ end
     def generate_jloop_body(ss,fvars,split_vars,conversion_type,h=$varhash)
       ret = Array.new
       ss.each{ |s|
-        if isStatement(s)
-          lexp = get_name(s)
-          list = [lexp] + s.expression.get_related_variable
-          doSplit = false
-          list.each{ |v| doSplit = true if split_vars.index(v)}
-          if s.expression.class == FuncCall && s.expression.name =~ /to_(f|s|u)(64|32|16)/
-            #p split_vars
-            type_to = s.get_type
-            type_from = s.expression.ops[0].get_type
-            size_to = get_single_data_size(type_to)
-            size_from= get_single_data_size(type_from)
-            n_to   = size_to   / $min_element_size
-            n_from = size_from / $min_element_size
-            if size_to == size_from
-              ret += [Statement.new([s.name,s.expression.ops[0],s.type,s.op])]
-            elsif size_to < size_from
-              #p "# of fusion var:",n_to,n_from
-              ops = Array.new
-              for i in 0...n_from
-                name = lexp + "_#{i}"
-                tmp = Statement.new([s.name.dup,s.expression.ops[0].dup,type_from,s.op])
-                tmp.replace_name(lexp,name)
-                #p s
-                split_vars.each{ |orig|
-                  #p "split:",orig
-                  #p tmp.expression
-                  tmp.expression = tmp.expression.replace_recursive(orig,orig + "_#{i}")
-                }
-                ret += [Declaration.new([type_from,name])]
-                ret += [tmp]
-                ops += [name]
-              end
-              ret += s.declare_temporal_var
-              ret += [Statement.new([lexp,Fusion.new([ops,type_from,type_to]),type_to])]
-            elsif size_to > size_from
-              # fission
-              rexp = s.expression.ops[0]
-              for i in 0...n_to
-                op = rexp
-                op += "_#{i/n_from}" if n_from>1
-                name = lexp + "_#{i}"
-                tmp = Statement.new([name,Fission.new([op,type_from,type_to,i%(n_to/n_from)]),type_to])
-
-                $varhash[name] = [nil,type_to,nil] if $varhash[name] == nil
-                ret += tmp.declare_temporal_var
-                ret += [tmp]
-              end
-              split_vars += [lexp]
-            else
-              ret += [s]
-            end
-          elsif doSplit
-            type = s.type
-            n = get_single_data_size(type) / $min_element_size
-
-            if n > 1
-              for i in 0...n
-                name = lexp + "_#{i}"
-                tmp = Statement.new([s.name.dup,s.expression.dup,s.type,s.op])
-                tmp.replace_name(lexp,name)
-                split_vars.each{ |orig|
-                  tmp.expression = tmp.expression.replace_recursive(orig,orig + "_#{i}")
-                }
-                tmp.expression.split_index = i if tmp.expression.class == Merge
-
-                $varhash[name] = [nil,@type,nil,nil] if $varhash[name] == nil
-                ret += tmp.declare_temporal_var($varhash)
-                ret += [tmp]
-
-              end
-            end
-
-            split_vars += [lexp]
+        if conversion_type == "reference"
+          if isStatement(s)
+            ret += s.declare_temporal_var 
+            ret.push(s)
+          elsif s.class == ConditionalBranch
+            tmp_cbb = ConditionalBranch.new([[],[]])
+            tmp_cbb.conditions = s.conditions
+            s.bodies.each{ |bss|
+              tmp_cbb.bodies.push(generate_jloop_body(bss,fvars,split_vars,conversion_type,h))
+            }
+            ret += [tmp_cbb]
           else
             ret += s.declare_temporal_var
             ret += [s]
           end
-        elsif s.class == ConditionalBranch
-          tmp_cbb = ConditionalBranch.new([[],[]])
-          tmp_cbb.conditions = s.conditions
-          tmp_predicate = Array.new
-          s.bodies.zip(s.conditions){ |bss,cond|
-            tmp = Array.new
-            tmp_nsplit = Array.new
-            bss.each{ |bs|
-              if fvars.index(get_name(bs)) != nil
-                n = get_single_data_size(bs.type) / $min_element_size
-                if n > 1
-                  tmp_nsplit.push(n)
+        else
+          if isStatement(s)
+            lexp = get_name(s)
+            list = [lexp] + s.expression.get_related_variable
+            doSplit = false
+            list.each{ |v| doSplit = true if split_vars.index(v)}
+            if s.expression.class == FuncCall && s.expression.name =~ /to_(f|s|u)(64|32|16)/
+              #p split_vars
+              type_to = s.get_type
+              type_from = s.expression.ops[0].get_type
+              size_to = get_single_data_size(type_to)
+              size_from= get_single_data_size(type_from)
+              n_to   = size_to   / $min_element_size
+              n_from = size_from / $min_element_size
+              if size_to == size_from
+                ret += [Statement.new([s.name,s.expression.ops[0],s.type,s.op])]
+              elsif size_to < size_from
+                #p "# of fusion var:",n_to,n_from
+                ops = Array.new
+                for i in 0...n_from
+                  name = lexp + "_#{i}"
+                  tmp = Statement.new([s.name.dup,s.expression.ops[0].dup,type_from,s.op])
+                  tmp.replace_name(lexp,name)
+                  #p s
+                  split_vars.each{ |orig|
+                    #p "split:",orig
+                    #p tmp.expression
+                    tmp.expression = tmp.expression.replace_recursive(orig,orig + "_#{i}")
+                  }
+                  ret += [Declaration.new([type_from,name])]
+                  ret += [tmp]
+                  ops += [name]
+                end
+                ret += s.declare_temporal_var
+                ret += [Statement.new([lexp,Fusion.new([ops,type_from,type_to]),type_to])]
+              elsif size_to > size_from
+                # fission
+                rexp = s.expression.ops[0]
+                for i in 0...n_to
+                  op = rexp
+                  op += "_#{i/n_from}" if n_from>1
+                  name = lexp + "_#{i}"
+                  tmp = Statement.new([name,Fission.new([op,type_from,type_to,i%(n_to/n_from)]),type_to])
+
+                  $varhash[name] = [nil,type_to,nil] if $varhash[name] == nil
+                  ret += tmp.declare_temporal_var
+                  ret += [tmp]
+                end
+                split_vars += [lexp]
+              else
+                ret += [s]
+              end
+            elsif doSplit
+              type = s.type
+              n = get_single_data_size(type) / $min_element_size
+              n = 1 if conversion_type == "reference"
+              if n > 1
+                for i in 0...n
+                  name = lexp + "_#{i}"
+                  tmp = Statement.new([s.name.dup,s.expression.dup,s.type,s.op])
+                  tmp.replace_name(lexp,name)
+                  split_vars.each{ |orig|
+                    tmp.expression = tmp.expression.replace_recursive(orig,orig + "_#{i}")
+                  }
+                  tmp.expression.split_index = i if tmp.expression.class == Merge
+
+                  $varhash[name] = [nil,@type,nil,nil] if $varhash[name] == nil
+                  ret += tmp.declare_temporal_var($varhash)
+                  ret += [tmp]
+
                 end
               end
+
+              split_vars += [lexp]
+            else
+              ret += s.declare_temporal_var
+              ret += [s]
+            end
+          elsif s.class == ConditionalBranch
+            tmp_cbb = ConditionalBranch.new([[],[]])
+            tmp_cbb.conditions = s.conditions
+            tmp_predicate = Array.new
+            s.bodies.zip(s.conditions){ |bss,cond|
+              tmp = Array.new
+              tmp_nsplit = Array.new
+              bss.each{ |bs|
+                if fvars.index(get_name(bs)) != nil
+                  n = get_single_data_size(bs.type) / $min_element_size
+                  if n > 1
+                    tmp_nsplit.push(n)
+                  end
+                end
+              }
+              tmp_nsplit.sort.uniq.each{ |n|
+                tmp += [SplitPredicate.new(n)]
+              }
+              tmp_predicate.push(tmp)
             }
-            tmp_nsplit.sort.uniq.each{ |n|
-              tmp += [SplitPredicate.new(n)]
+            
+            s.bodies.zip(tmp_predicate){ |bss,pss|
+              tmp_cbb.bodies.push(pss + generate_jloop_body(bss,fvars,split_vars,conversion_type,h))
             }
-            tmp_predicate.push(tmp)
-          }
-          
-          s.bodies.zip(tmp_predicate){ |bss,pss|
-            tmp_cbb.bodies.push(pss + generate_jloop_body(bss,fvars,split_vars,conversion_type,h))
-          }
-          ret += [tmp_cbb]
-        else
-          ret += s.declare_temporal_var
-          ret += [s]
+            ret += [tmp_cbb]
+          else
+            ret += s.declare_temporal_var
+            ret += [s]
+          end
         end
       }
       ret
     end
 
-    def generate_accum_hash(ss,h=$varhash)
-      accum_hash = Hash.new
-      h.each{ |v|
-        #p v
-        name = v[0]
-        iotype = get_iotype_from_hash(v)
-        if iotype == "FORCE"
-          ss.each{ |s|
-            if isStatement(s) && get_name(s) == name
-              next if s.expression.class == Merge
-              head = get_name(s)
-              tail = get_tail(s)
-              accum_hash[head] = Array.new if accum_hash[head] == nil
-              if s.expression.class == Expression
-                operator = s.expression.operator
-              elsif s.expression.class == MADD
-                case s.expression.operator
-                when :madd
-                  operator = :plus
-                when :msub
-                  operator = :minus
-                else
-                  p s
-                  abort "unsupported accumulate operator #{s.expression.operator}"
-                end
-              elsif s.expression.class == FuncCall
-                case s.expression.name
-                when "max"
-                  operator = "max"
-                when "min"
-                  operator = "min"
-                else
-                  p s
-                  abort "unsupported accumulate fuction #{s.expression.name}"
-                end
-              end
-              if tail == nil
-                accum_hash[head][0] = operator
-              else
-                accum_hash[head][["x","y","z","w"].index(tail)] = operator
-              end
-            elsif s.class == ConditionalBranch
-              #p "cbb"
-              s.bodies.each{ |b|
-                tmp_hash = Hash.new
-                tmp_hash = generate_accum_hash(b,h)
-                tmp_hash.each{|v|
-                  accum_hash[v[0]] = v[1]
-                }
-              }
-            end
-          }
-        end
-      }
-      accum_hash
-    end
 
     def kernel_body_multi_prec(ninj,conversion_type,istart=0,h=$varhash)
-      accum_hash = generate_accum_hash(@statements,h)
+      #accum_hash = generate_accum_hash(@statements,h)
 
       code = String.new
 
@@ -1067,11 +1044,11 @@ end
       #p split_vars
       iloop = generate_loop_begin_multi_prec(conversion_type,ninj[0]*$max_element_size/$min_element_size,"i",istart)
       #iloop.statements += load_ivars(conversion_type,lane_size,lane_size/ninj[0],fvars)
+
       # load EPI and FORCE variable
       iloop.statements += load_vars("EPI",fvars,ninj[0],conversion_type)
-
       #iloop.statements += load_vars("FORCE",fvars,ninj[0],conversion_type)
-      iloop.statements += init_force(fvars,accum_hash,conversion_type)
+      iloop.statements += init_force(fvars,$accumhash,conversion_type)
 
       jloop = generate_loop_begin_multi_prec(conversion_type,ninj[1],"j",0)
       jloop.statements += load_jvars(fvars,ninj[1],conversion_type)
@@ -1096,8 +1073,8 @@ end
         jloop_tail = TailJLoop.new([jloop_tail,ninj,tmpvar])
         iloop.statements += [jloop_tail]
       end
-      iloop.statements += store_vars(accum_hash,fvars,ninj[0],conversion_type)
-      
+      iloop.statements += store_vars($accumhash,fvars,ninj[0],conversion_type)
+
       ss = Array.new
       ss += [iloop]
 
@@ -1115,7 +1092,6 @@ end
         code += kernel_body("reference",nil,h)
         code += "} // end loop of reference \n"
       end
-
       #abort
       code
     end

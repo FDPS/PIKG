@@ -214,6 +214,57 @@ class Kernelprogram
     ["ni","nj","i","j","jj","jjj"].each{ |x|
       $varhash[x] = [nil,"S32",nil]
     }
+
+    @statements.each{|s|
+      if isStatement(s)
+        head = get_name(s)
+        tail = get_tail(s)
+        if $varhash[head][0] == "FORCE"
+          type = $varhash[head][1]
+          $accumhash[head] = Array.new if $accumhash[head] == nil
+          if s.op != nil
+            if tail == nil
+              get_vector_elements(type).each_with_index{ |dim,i|
+                $accumhash[head][i] = s.op
+              }
+            else
+              $accumhash[head][["x","y","z","w"].index(tail)] = s.op
+            end
+          else
+            if s.expression.class == Expression
+              operator = s.expression.operator
+            elsif s.expression.class == MADD
+              case s.expression.operator
+              when :madd
+                operator = :plus
+              when :msub
+                operator = :minus
+              else
+                p s
+                abort "unsupported accumulate operator #{s.expression.operator}"
+              end
+            elsif s.expression.class == FuncCall
+              case s.expression.name
+              when "max"
+                operator = "max"
+              when "min"
+                operator = "min"
+              else
+                p s
+                abort "unsupported accumulate fuction #{s.expression.name}"
+              end
+            end
+            if tail == nil
+              get_vector_elements(type).each_with_index{ |dim,i|
+                $accumhash[head][i] = operator
+              }
+            else
+              $accumhash[head][["x","y","z","w"].index(tail)] = operator
+            end
+          end
+        end
+      end
+    }
     #p $funchash
   end
   def print_function(conversion_type)
@@ -447,20 +498,6 @@ class Kernelprogram
     code += "int kernel_id = 0;\n"
     code += "void operator()"
     code += "(const #{$epi_name}* __restrict__ epi,const int ni,const #{$epj_name}* __restrict__ epj,const int nj,#{$force_name}* __restrict__ force,const int kernel_select = -1){\n"
-    if conversion_type =~ /(A64FX|AVX)/
-      $pg_count = 0
-      $current_predicate = "pg#{$pg_count}"
-      $max_pg_count = calc_max_predicate_count(@statements)
-      if conversion_type =~ /A64FX/
-        for i in 0...$max_pg_count
-          code += "svbool_t pg#{i};\n"
-        end
-        p code
-      elsif conversion_type =~ /AVX2/
-      elsif conversion_type =~ /AVX-512/
-      end
-    end
-
     code
   end
 
@@ -1160,13 +1197,15 @@ class Kernelprogram
   end
 
   def make_conditional_branch_block(h = $varhash)
-    @statements = make_conditional_branch_block_recursive3(@statements,h)
+    fvars = generate_force_related_map(@statements)
+    @statements,dummy = make_conditional_branch_block_recursive3(@statements,h)
   end
 
   def make_conditional_branch_block_recursive3(ss,h = $varhash,related_vars = [])
     ret = Array.new
     nest_level = 0
     cbb = nil
+
     ss.reverse_each{ |s|
       if nest_level == 0
         if s.class == IfElseState && s.operator == :endif
@@ -1175,15 +1214,14 @@ class Kernelprogram
         else
           if isStatement(s)
             name = get_name(s)
-            if related_vars.index(s) || (h[s] != nil && h[s][0] == "FORCE")
-              related_vars.push(get_name(s))
+            if related_vars.index(name) || (h[name] != nil && h[name][0] == "FORCE")
+              related_vars.push(name)
               related_vars += s.expression.get_related_variable
             end
           else
             related_vars += s.expression.get_related_variable
           end
           related_vars.sort!.uniq!
-
           ret.push(s)
         end
       elsif nest_level == 1
@@ -1212,9 +1250,11 @@ class Kernelprogram
         if nest_level == 1
           new_b = []
           new_c = []
+          related_vars_tmp = nil
           cbb.bodies.reverse_each{ |b|
             b.reverse!
-            new_b.push(make_conditional_branch_block_recursive3(b,h,related_vars))
+            tmp,related_vars_tmp = make_conditional_branch_block_recursive3(b,h,related_vars)
+            new_b.push(tmp)
           }
           cbb.conditions.reverse_each{ |c|
             new_c.push(c)
@@ -1232,7 +1272,7 @@ class Kernelprogram
               if isStatement(bs) && bs.expression.class != Merge
                 name = get_name(bs)
                 tail = get_tail(bs)
-                if related_vars.find(){ |n| n == name } || h[name][0] == "FORCE"
+                if related_vars.index(name) || h[name][0] == "FORCE"
                   tmp_name_hash[name] = add_new_tmpvar(bs.type) if tmp_name_hash[name] == nil
                   if ["x","y","z","w"].index(tail)
                     src = Expression.new([:dot,tmp_name_hash[name],tail,bs.type])
@@ -1245,6 +1285,7 @@ class Kernelprogram
               end
             }
           }
+          related_vars = related_vars_tmp if related_vars_tmp != nil
           #p tmp_name_hash
           cbb.bodies.each{  |bss|
             computed_list = []
@@ -1267,7 +1308,7 @@ class Kernelprogram
       end
       abort "nest_level < 0" if nest_level < 0
     }
-    ret.reverse
+    [ret.reverse, related_vars]
   end
 
   def make_conditional_branch_block_recursive2(ss,h = $varhash,related_vars = [])
@@ -1604,6 +1645,7 @@ src = ""
 program=parser.parse(filename)
 $varhash = Hash.new
 $funchash = Hash.new
+$accumhash = Hash.new
 program.process_funcdecl($funchash)
 if $epi_file != nil && $epj_file != nil && $force_file != nil
   ["EPI","EPJ","FORCE"].each{ |iotype|
