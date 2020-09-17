@@ -135,7 +135,7 @@ class Accumulate
         src = @src
         src = Expression.new([:dot,src,dim,get_single_element_type(@type)]) if dim != ""
         if @op == "max" || @op == "min"
-          ret += Statement.new([dest,FuncCall.new([@op,[src,dest],@type])]).covert_to_code(conversion_type)
+          ret += Statement.new([dest,FuncCall.new([@op,[src,dest],@type])]).convert_to_code(conversion_type)
         else
           ret += Statement.new([dest,src,@type,:plus]).convert_to_code(conversion_type) if @op == :plus || @op == :minus
           ret += Statement.new([dest,src,@type,:mult]).convert_to_code(conversion_type) if @op == :mult || @op == :div
@@ -1105,7 +1105,7 @@ end
       ss = Array.new
       ss += [iloop]
 
-      kernel_body.each{ |s|
+      ss.each{ |s|
         code += s.convert_to_code(conversion_type)
       }
       if conversion_type == "AVX2" || conversion_type == "AVX-512"
