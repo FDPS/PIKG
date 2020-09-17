@@ -1,7 +1,7 @@
 class Load
-  attr_accessor :dest, :src, :nelem, :type, :iotype
+  attr_accessor :dest, :src, :nelem, :type, :iotype, :modifier
   def initialize(x)
-    @dest,@src,@nelem,@type,@iotype = x
+    @dest,@src,@nelem,@type,@iotype,@modifier = x
   end
 
   def convert_to_code(conversion_type)
@@ -38,7 +38,11 @@ class Load
           ret += "#{@dest.convert_to_code(conversion_type)} = _mm256_set1_#{suffix}(#{src.convert_to_code("reference")});\n"
         }
       when 1
-        ret += GatherLoad.new([dest,src,"0","#{offset_gather}",type]).convert_to_code(conversion_type)
+        if @modifier == "local"
+          ret += LoadState.new([dest,src,type]).convert_to_code(conversion_type)
+        else
+          ret += GatherLoad.new([dest,src,"0","#{offset_gather}",type]).convert_to_code(conversion_type)
+        end
       else
         abort "unsupported number of elemet (#{@nelem}) for Load" if nlane <= 0
         index = String.new
@@ -75,7 +79,11 @@ class Load
           ret += "#{@dest.convert_to_code(conversion_type)} = _mm512_set1_#{suffix}(#{src.convert_to_code("reference")});\n"
         }
       when 1
-        ret += GatherLoad.new([dest,src,"0","#{offset_gather}",type]).convert_to_code(conversion_type)
+        if @modifier == "local"
+          ret += LoadState.new([dest,src,type]).convert_to_code(conversion_type)
+        else
+          ret += GatherLoad.new([dest,src,"0","#{offset_gather}",type]).convert_to_code(conversion_type)
+        end
       else
       end
     when "A64FX"
@@ -91,7 +99,11 @@ class Load
           ret += "#{@dest.convert_to_code(conversion_type)} = _svld1_#{suffix}(#{$current_predicate},#{src.convert_to_code("reference")});\n"
         }
       when 1
-        ret += GatherLoad.new([dest,src,"0","#{offset_gather}",type]).convert_to_code(conversion_type)
+        if @modifier == "local"
+          ret += LoadState.new([dest,src,type]).convert_to_code(conversion_type)
+        else
+          ret += GatherLoad.new([dest,src,"0","#{offset_gather}",type]).convert_to_code(conversion_type)
+        end
       else
       end
     end
@@ -466,6 +478,7 @@ end
       code += kernel_class_def(conversion_type)
       code += "if(kernel_select>=0) kernel_id = kernel_select;\n"
       code += "if(kernel_id == 0){\n"
+      code += "std::cout << \"ni: \" << ni << \" nj:\" << nj << std::endl;\n"
       code += "#{$force_name}* force_tmp = new #{$force_name}[ni];\n"
       code += "std::chrono::system_clock::time_point  start, end;\n"
       code += "double min_time = std::numeric_limits<double>::max();\n"
@@ -476,7 +489,7 @@ end
         code += "Kernel_I#{ninj[0]}_J#{ninj[1]}(epi,ni,epj,nj,force_tmp);\n"
         code += "end = std::chrono::system_clock::now();\n"
         code += "double elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();\n"
-        #code += "std::cerr << \"kerel #{index+1}: \" << elapsed << \" ns\" << std::endl;\n"
+        code += "std::cerr << \"kerel #{index+1}: \" << elapsed << \" ns\" << std::endl;\n"
         code += "if(min_time > elapsed){\n"
         code += "min_time = elapsed;\n"
         code += "kernel_id = #{index+1};\n"
@@ -697,11 +710,18 @@ end
       ret
     end
 
-    def load_local_var(name,type,offset = 0)
+    def load_local_var(name,type,nelem,iotype,offset = 0,h = $varhash)
+      ret = Array.new
+      type_single = get_single_element_type(type)
+      iotype = h[name][0]
+      ij = "i"
+      ij = "j" if iotype == "EPJ"
       get_vector_elements(type).each{|dim|
-        dst = Expression.new([:dot,name,dim,tmp_type])
-        src = PointerOf.new([tmp_type,Expression.new([:array,"#{name}_tmp_"+dim,"i+#{offset}",])])
-        ret += [LoadState.new([dst,src,tmp_type])]
+        dst = name
+        dst = Expression.new([:dot,name,dim,type_single]) if dim != ""
+        src = PointerOf.new([type_single,Expression.new([:array,"#{name}_tmp","#{ij}+#{offset}",])])
+        src = PointerOf.new([type_single,Expression.new([:array,"#{name}_tmp_"+dim,"#{ij}+#{offset}",])]) if dim != ""
+        ret += [Load.new([dst,src,nelem,type_single,iotype,"local"])]
       }
       ret
     end
@@ -722,7 +742,7 @@ end
             offset = i*nelem #get_num_elem(type,conversion_type)
             ret += [Declaration.new([type,name])]
             if modifier == "local"
-              ret += load_local_var(name,type,offset)
+              ret += load_local_var(name,type,nelem,iotype,offset)
             else
               tot, max_byte_size, is_uniform = count_class_member(iotype)
               type_single = get_single_element_type(type)
@@ -757,7 +777,7 @@ end
           name = v
           ret += [Declaration.new([type,name])]
           if modifier == "local"
-            ret += load_local_var(name,type,offset)
+            ret += load_local_var(name,type,nelem,iotype)
           else
             tot, max_byte_size, is_uniform = count_class_member(iotype)
             type_single = get_single_element_type(type)
@@ -970,6 +990,10 @@ end
       #accum_hash = generate_accum_hash(@statements,h)
 
       code = String.new
+      kernel_body = Array.new
+
+      code += NonSimdDecl.new(["S32","i"]).convert_to_code(conversion_type) if istart == 0
+      code += NonSimdDecl.new(["S32","j"]).convert_to_code(conversion_type)
 
       # declare "local" variables
       h.each{ |v|
@@ -981,16 +1005,17 @@ end
           array_size = ["ni","nj"][["EPI","EPJ"].index(iotype)]
           if type =~ /vec/
             type = type.delete("vec")
-            ret += [Declaration.new([type,Expression.new([:array,"#{name}_tmp_x",array_size,type])])]
-            ret += [Declaration.new([type,Expression.new([:array,"#{name}_tmp_y",array_size,type])])]
-            ret += [Declaration.new([type,Expression.new([:array,"#{name}_tmp_z",array_size,type])])]
+            code += Declaration.new([type,Expression.new([:array,"#{name}_tmp_x",array_size,type])]).convert_to_code("reference")
+            code += Declaration.new([type,Expression.new([:array,"#{name}_tmp_y",array_size,type])]).convert_to_code("reference")
+            code += Declaration.new([type,Expression.new([:array,"#{name}_tmp_z",array_size,type])]).convert_to_code("reference")
           else
-            ret += [Declaration.new([type,Expression.new([:array,"#{name}_tmp",array_size,type])])]
+            code += Declaration.new([type,Expression.new([:array,"#{name}_tmp",array_size,type])]).convert_to_code("reference")
           end
         end
       }
 
       # calc or copy local variables from EPI, EPJ, or FORCE
+      ss = Array.new
       @statements.each{ |s|
         name = get_name(s) if s.class == Statement
         if name != nil && h[name][3] == "local"
@@ -1007,23 +1032,25 @@ end
           end
           new_exp = exp.replace_fdpsname_recursive(h)
           loop_tmp.statements += [Statement.new([new_name,new_exp])]
-          ret += [loop_tmp]
+          code += loop_tmp.convert_to_code("reference")
+        else
+          ss.push(s)
         end
       }
 
       # declare and load TABLE variable
-      tmp = []
-      @statements.each{ |s|
+      tmp = Array.new
+      ss.each{ |s|
         if s.class == TableDecl
           ret.push(s)
           tmp.push(s)
         end
       }
       tmp.each{ |s|
-        @statements.delete(s)
+        ss.delete(s)
       }
 
-      fvars = generate_force_related_map(@statements)
+      fvars = generate_force_related_map(ss)
       lane_size = get_simd_width(conversion_type) / $min_element_size
       lane_size = 1 if lane_size == 0
 
@@ -1052,7 +1079,7 @@ end
 
       jloop = generate_loop_begin_multi_prec(conversion_type,ninj[1],"j",0)
       jloop.statements += load_jvars(fvars,ninj[1],conversion_type)
-      jloop.statements += generate_jloop_body(@statements,fvars,split_vars,conversion_type)
+      jloop.statements += generate_jloop_body(ss,fvars,split_vars,conversion_type)
       iloop.statements += [jloop]
       if ninj[1] > 1
         h.each{ |v|
@@ -1069,7 +1096,7 @@ end
         }
         jloop_tail = generate_loop_begin_multi_prec(conversion_type,1,"j",nil)
         jloop_tail.statements += load_jvars(fvars,1,conversion_type)
-        jloop_tail.statements += generate_jloop_body(@statements,fvars,split_vars,conversion_type,nil)
+        jloop_tail.statements += generate_jloop_body(ss,fvars,split_vars,conversion_type,nil)
         jloop_tail = TailJLoop.new([jloop_tail,ninj,tmpvar])
         iloop.statements += [jloop_tail]
       end
@@ -1078,9 +1105,7 @@ end
       ss = Array.new
       ss += [iloop]
 
-      code += NonSimdDecl.new(["S32","i"]).convert_to_code(conversion_type) if istart == 0
-      code += NonSimdDecl.new(["S32","j"]).convert_to_code(conversion_type)
-      ss.each{ |s|
+      kernel_body.each{ |s|
         code += s.convert_to_code(conversion_type)
       }
       if conversion_type == "AVX2" || conversion_type == "AVX-512"

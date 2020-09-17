@@ -1425,6 +1425,7 @@ class String
     if propaties
       propaties[1]
     else
+      p h
       p h[self]
       p self
       nil[0]
