@@ -748,13 +748,70 @@ class IfElseState
       else
         abort "error: undefined if operator #{@operator}"
       end
-    when /A64FX/
-      ret = self.convert_to_code_a64fx(conversion_type)
-    when /AVX2/
-      ret = self.convert_to_code_avx2(conversion_type)
-    when /AVX-512/
-      #p self
-      ret = self.convert_to_code_avx512(conversion_type)
+    when /(A64FX|AVX2|AVX-512)/
+      if $predicate_queue == nil
+        $predicate_queue = Array.new()
+      end
+      if $nest_queue == nil
+        $nest_queue = Array.new()
+      end
+      type = "B" + sizeof(@expression.get_type) if @expression != nil
+      ret = ""
+      pg_accum = "pg_accum"
+      case @operator
+      when :if
+        ret += "{\n"
+        $accumulate_predicate = "pg#{$pg_count}"
+        $varhash[$accumulate_predicate] = [nil,type,nil,nil]
+        $pg_count += 1
+        $current_predicate = "pg#{$pg_count}"
+        $varhash[$current_predicate] = [nil,type,nil,nil]
+        $pg_count += 1
+        exp = @expression
+        ret += Declaration.new([type,$current_predicate]).convert_to_code(conversion_type)
+        ret += Declaration.new([type,$accumulate_predicate]).convert_to_code(conversion_type)
+        ret += Statement.new([$current_predicate,exp,type]).convert_to_code(conversion_type) + "\n"
+        ret += Statement.new([$accumulate_predicate,$current_predicate,type,nil]).convert_to_code(conversion_type) + "\n"
+        if $nest_queue.empty?
+        else
+          $nest_queue.each{ |predicate|
+            ret += Statement.new([$current_predicate,Expression.new([:land,$current_predicate,predicate,type]),type,nil]).convert_to_code(conversion_type) + "\n"
+          }
+        end
+        $predicate_queue.push($current_predicate)
+        $nest_queue.push($current_predicate)
+      when :elsif
+        $nest_queue.pop
+        tmp_predicate = $predicate_queue.pop
+        $current_predicate = "pg#{$pg_count}"
+        $varhash[$current_predicate] = [nil,type,nil,nil]
+        $pg_count += 1
+        ret += Declaration.new([type,$current_predicate]).convert_to_code(conversion_type) + "\n"
+        ret += Statement.new([tmp_predicate,@expression,type]).convert_to_code(conversion_type) + "\n"
+        ret += Statement.new([$current_predicate,Expression.new([:landnot,tmp_predicate,$accumulate_predicate]),type,nil]).convert_to_code(conversion_type) + "\n"
+        ret += Statement.new([$accumulate_predicate,Expression.new([:lor,$accumulate_predicate,tmp_predicate,type]),type,nil]).convert_to_code(conversion_type) + "\n"
+        $nest_queue.each{ |predicate|
+          ret += Statement.new([$current_predicate,Expression.new([:land,$current_predicate,predicate,type]),type,nil]).convert_to_code(conversion_type) + "\n"
+        }
+        $predicate_queue.push(tmp_predicate)
+        $nest_queue.push($current_predicate)
+      when :else
+        $nest_queue.pop
+        $current_predicate = $predicate_queue.pop
+        ret += Statement.new([$current_predicate,Expression.new([:not,$accumulate_predicate,nil,type]),type,nil]).convert_to_code(conversion_type) + "\n"
+        $nest_queue.each{ |predicate|
+          ret += Statement.new([$current_predicate,Expression.new([:land,$current_predicate,predicate,type]),type,nil]).convert_to_code(conversion_type) + "\n"
+        }
+        $nest_queue.push($current_predicate)
+      when :endif
+        $predicate_queue.pop
+        $nest_queue.pop
+        abort "pg_count < 0" if $pg_count < 0
+        $current_predicate = "pg#{$pg_count}"
+        ret += "}\n"
+      else
+        abort "undefined operator of IfElseState: #{@operator}"
+      end
     else
       abort "error: unsupported conversion_type #{conversion_type}"
     end
@@ -876,7 +933,7 @@ class GatherLoad
         end
       end
       size_single = get_single_data_size(@type)
-      ret += "static uint#{size_single}_t #{index_name}[#{nelem}] = {#{index}};\n"
+      ret += "uint#{size_single}_t #{index_name}[#{nelem}] = {#{index}};\n"
       ret += "svuint#{size_single}_t #{vindex_name} = svld1_u#{size_single}(#{$current_predicate},#{index_name});\n"
       ret += "#{@dest.convert_to_code(conversion_type)} = svld1_gather_u#{size_single}index_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)},#{vindex_name});"
     when /AVX2/
@@ -890,9 +947,9 @@ class GatherLoad
           index +=  ",#{i*@interval.to_i + @offset.to_i}"
         end
       end
-      ret += "static int #{index_name}[#{nelem}] = {#{index}};\n"
+      ret += "int #{index_name}[#{nelem}] = {#{index}};\n"
       index_simd_width = 32 * nelem
-      ret += "static __m#{index_simd_width}i #{vindex_name} = "
+      ret += "__m#{index_simd_width}i #{vindex_name} = "
       case index_simd_width
       when 128
         ret += "_mm_load_si128((const __m128i*)#{index_name});\n"
@@ -913,8 +970,8 @@ class GatherLoad
           index +=  "#{i*@interval.to_i + @offset.to_i}"
         end
       end
-      ret += "static int#{size}_t #{index_name}[#{nelem}] = {#{index}};\n"
-      ret += "static __m512i #{vindex_name} = _mm512_load_epi#{size}(#{index_name});\n"
+      ret += "int#{size}_t #{index_name}[#{nelem}] = {#{index}};\n"
+      ret += "__m512i #{vindex_name} = _mm512_load_epi#{size}(#{index_name});\n"
       ret += "#{@dest.convert_to_code(conversion_type)} = _mm512_i#{size}gather_#{get_type_suffix_avx512(@type)}(#{vindex_name},#{@src.convert_to_code(conversion_type)},#{scale});"
     else
       abort "unsupported conversion type for GatherLoad"
@@ -945,7 +1002,7 @@ class ScatterStore
         end
       end
       size_single = get_single_data_size(@type)
-      ret += "static uint#{size_single}_t #{index_name}[#{nelem}] = {#{index}};\n"
+      ret += "uint#{size_single}_t #{index_name}[#{nelem}] = {#{index}};\n"
       ret += "svuint#{size_single}_t #{vindex_name} = svld1_u#{size_single}(#{$current_predicate},#{index_name});\n"
       ret += "svst1_scatter_u#{size_single}index_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@dest.convert_to_code(conversion_type)},#{vindex_name},#{@src.convert_to_code(conversion_type)});"
     when /AVX2/
@@ -961,7 +1018,6 @@ class ScatterStore
         end
       else
         index = index.split(",")
-        p index
       end
 
       index.each_with_index{ |a,b|
@@ -989,8 +1045,8 @@ class ScatterStore
           index +=  "#{@offset.to_i + i*@interval.to_i}"
         end
       end
-      ret += "static int#{size}_t #{index_name}[#{nelem}] = {#{index}};\n"
-      ret += "static __m512i #{vindex_name} = _mm512_load_epi#{size}(#{index_name});\n"
+      ret += "int#{size}_t #{index_name}[#{nelem}] = {#{index}};\n"
+      ret += "__m512i #{vindex_name} = _mm512_load_epi#{size}(#{index_name});\n"
       ret += "_mm512_i#{size}scatter_#{get_type_suffix_avx512(@type)}(#{@dest.convert_to_code(conversion_type)},#{vindex_name},#{@src.convert_to_code(conversion_type)},#{scale});\n"
     else
       abort "unsupported conversion type for ScatterStore"
@@ -1279,8 +1335,16 @@ class Merge
       suffix = get_type_suffix_avx2(@type)
       predicate = $current_predicate
       predicate += "_#{@split_index}" if @split_index != nil
-      predicate = "_mm256_castps_#{suffix}(" + predicate + ")" if suffix != "ps"
-      ret = "_mm256_blendv_#{suffix}(#{@op2.convert_to_code(conversion_type)},#{@op1.convert_to_code(conversion_type)},#{predicate});" # inactive elements come from first input
+       # inactive elements come from first input
+      if suffix == "epi32"
+        ret = "_mm256_blendv_ps(_mm256_castsi256_ps(#{@op2.convert_to_code(conversion_type)}),_mm256_castsi256_ps(#{@op1.convert_to_code(conversion_type)}),#{predicate});"
+      elsif suffix == "epi64"
+        predicate = "_mm256_castsi256_pd(" + predicate + ")"
+        ret = "_mm256_blendv_pd(_mm256_castsi256_pd(#{@op2.convert_to_code(conversion_type)}),_mm256_castsi256_pd(#{@op1.convert_to_code(conversion_type)}),#{predicate});"
+      else
+        predicate = "_mm256_castps_pd(" + predicate + ")" if suffix == "pd"
+        ret = "_mm256_blendv_#{suffix}(#{@op2.convert_to_code(conversion_type)},#{@op1.convert_to_code(conversion_type)},#{predicate});"
+      end
     when /AVX-512/
       predicate = $current_predicate
       predicate += "_#{@split_index}" if @split_index != nil
@@ -1333,7 +1397,7 @@ class Expression
         end
         type += "vec" if lt.index("vec") ||  rt.index("vec")  
       end
-    elsif [:land,:lor,:eq,:neq,:lt,:le,:gt,:ge,:not].index(operator)
+    elsif [:land,:lor,:eq,:neq,:lt,:le,:gt,:ge,:landnot].index(operator)
       rt = rop.get_type(h)
       abort "type is not derived for #{lop} = #{lt}, #{rop} = #{rt} in derive_type" if lt == nil || rt == nil
       abort "vector type comparison is not supported. (#{lt} #{rt})" if lt =~ /(vec|mat)/ || rt =~ /(vec|mat)/
@@ -1344,7 +1408,7 @@ class Expression
       else
         type = "B16"
       end
-    elsif operator == :uminus || operator == :array
+    elsif operator == :uminus || operator == :array || :not
       type = lt
     elsif operator == :dot
       if rop == "x" || rop == "y" || rop == "z"

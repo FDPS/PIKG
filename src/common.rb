@@ -44,10 +44,10 @@ def get_initial_value(op,type)
     when "U16"
       "std::numeric_limits<uint16_t>::lowest()"
     when "F64"
-      "std::numeric_limits<float64_t>::lowest()"
-    when "F64"
-      "std::numeric_limits<float32_t>::lowest()"
-    when "F64"
+      "std::numeric_limits<double>::lowest()"
+    when "F32"
+      "std::numeric_limits<float>::lowest()"
+    when "F16"
       "std::numeric_limits<float16_t>::lowest()"
     end
   elsif op == "min"
@@ -65,11 +65,13 @@ def get_initial_value(op,type)
     when "U16"
       "std::numeric_limits<uint16_t>::max()"
     when "F64"
-      "std::numeric_limits<float64_t>::max()"
-    when "F64"
-      "std::numeric_limits<float32_t>::max()"
-    when "F64"
+      "std::numeric_limits<double>::max()"
+    when "F32"
+      "std::numeric_limits<float>::max()"
+    when "F16"
       "std::numeric_limits<float16_t>::max()"
+    else
+      abort "error: unsupported type #{type} for get_initial_value"
     end
   else
     abort "unsupported accumulate operator #{op} for get_initial_value"

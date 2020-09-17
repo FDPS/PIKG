@@ -141,51 +141,6 @@ class Kernelprogram
   end
 end
 
-class IfElseState
-  def convert_to_code_avx512(conversion_type)
-    if $predicate_queue == nil
-      $predicate_queue = Array.new()
-    end
-    if $condition_queue == nil
-      $condition_queue = Array.new()
-    end
-    type = "B" + sizeof(@expression.get_type) if @expression != nil
-    ret = ""
-    case @operator
-    when :if
-      $current_predicate = "pg#{$pg_count}"      
-      $predicate_queue.push($current_predicate)
-      $condition_queue.push(Expression.new([:not,@expression,nil,type]))
-      $pg_count += 1
-      ret = Declaration.new([type,$current_predicate]).convert_to_code(conversion_type)
-      ret += Statement.new([$current_predicate,@expression,type]).convert_to_code(conversion_type)
-    when :elsif
-      $current_predicate = $predicate_queue.pop
-      cond = $condition_queue.pop
-      ret = Statement.new(["pg#{$pg_count}",Expression.new([:land,expression,cond,type]),type]).convert_to_code(conversion_type)
-      $predicate_queue.push($current_predicate)
-      $current_predicate = "pg#{$pg_count}"
-      $condition_queue.push(Expression.new([:land,cond,Expression.new([:not,expression,nil,type]),type]))
-    when :else
-      $current_predicate = $predicate_queue.pop
-      cond = $condition_queue.pop
-      ret = Statement.new(["pg#{$pg_count}",Expression.new([:land,expression,cond,type]),type]).convert_to_code(conversion_type)
-      $predicate_queue.push($current_predicate)
-      $current_predicate = "pg#{$pg_count}"
-      $condition_queue.push(Expression.new([:land,cond,Expression.new([:not,expression,nil,type]),type]))
-    when :endif
-      $predicate_queue.pop
-      $condition_queue.pop
-
-      $current_predicate = "pg0"
-      $pg_count += 1
-    else
-      abort "undefined operator of IfElseState: #{@operator}"
-    end
-    ret
-  end
-end
-
 class FuncCall
   def convert_to_code_avx512(conversion_type)
     retval = @name
@@ -282,9 +237,17 @@ class Expression
         p self
         abort "unsupported operands for :lor in convert_to_code_avx512"
       end
+    when :landnot then
+      if @lop.get_type =~ /B/ && @rop.get_type =~ /B/
+        retval = "_kand_#{suffix}("
+        retval += @lop.convert_to_code(conversion_type) + ",_knot_#{suffix}(" + @rop.convert_to_code(conversion_type) + "))"
+      else
+        p self
+        abort "unsupported operands for :land in convert_to_code_avx512"
+      end
     when :not then
       if true #@lop.get_type =~ /B/
-        retval = "_kor_#{suffix}("
+        retval = "_knot_#{suffix}("
         retval += @lop.convert_to_code(conversion_type) + ")"
       else
         p self
