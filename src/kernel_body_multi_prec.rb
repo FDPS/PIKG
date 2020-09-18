@@ -343,8 +343,8 @@ end
             imm8 = "0b00000001" if type_single =~ /F64/
             imm8 = "0b00000011" if type_single =~ /F32/
           when 16
-            abort "j_parallel of F64 must be <= 8" if type_Single == /64/
-            imm8 = "0b00000001" if type_single =~ "F32"
+            abort "j_parallel of F64 must be <= 8" if type_single == /64/
+            imm8 = "0b00000001" if type_single =~ /F32/
           end
           for i in 0...n_split
             get_vector_elements(type).each{ |dim|
