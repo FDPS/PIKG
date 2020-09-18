@@ -206,7 +206,15 @@ class Accumulate
       src = @src.convert_to_code(conversion_type)
       case nlane
       when lane_size # 16 for FP32, 8 for FP64
-        ret += "#{@dest.convert_to_code(conversion_type)}[0] += _mm512_reduce_#{op}_#{suffix}(#{src});\n"
+        if op == "max" || op == "min"
+          ret += "#{@dest.convert_to_code(conversion_type)}[0] = _mm512_reduce_#{op}_#{suffix}(#{src});\n"
+        elsif op == "add"
+          ret += "#{@dest.convert_to_code(conversion_type)}[0] += _mm512_reduce_#{op}_#{suffix}(#{src});\n"
+        elsif op == "mul"
+          ret += "#{@dest.convert_to_code(conversion_type)}[0] *= _mm512_reduce_#{op}_#{suffix}(#{src});\n"
+        else
+          abort "unsupported accumulate operator #{op} for AVX=512"
+        end
       when 1
         tmp = "__fkg_tmp_accum"
         ret += "{\n"
