@@ -144,11 +144,7 @@ end
 class FuncCall
   def convert_to_code_avx512(conversion_type)
     retval = @name
-    if $current_predicate != "pg0"
-      retval += "_mask("
-    else
-      retval += "("
-    end
+    retval += "("
     if @ops.length > 0
       @ops.each_with_index{ |op,i|
         retval += "," if i > 0
@@ -189,22 +185,52 @@ class Expression
       retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ")"
     when :lt then
       retval += "_cmp_#{suffix}_mask("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ",_CMP_LT_OQ)"
+      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type)
+      if suffix =~ /epi/
+        retval += ",_MM_CMPINT_LT)"
+      else
+        retval += ",_CMP_LT_OQ)"
+      end
     when :le then
       retval += "_cmp_#{suffix}_mask("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ",_CMP_LE_OQ)"
+      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type)
+      if suffix =~ /epi/
+        retval += ",_MM_CMPINT_LE)"
+      else
+        retval += ",_CMP_LE_OQ)"
+      end
     when :gt then
       retval += "_cmp_#{suffix}_mask("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ",_CMP_GT_OQ)"
+      retval += @rop.convert_to_code(conversion_type) + "," + @lop.convert_to_code(conversion_type)
+      if suffix =~ /epi/
+        retval += ",_MM_CMPINT_LE)"
+      else
+        retval += ",_CMP_LE_OQ)"
+      end
     when :ge then
       retval += "_cmp_#{suffix}_mask("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ",_CMP_GE_OQ)"
+      retval += @rop.convert_to_code(conversion_type) + "," + @lop.convert_to_code(conversion_type)
+      if suffix =~ /epi/
+        retval += ",_MM_CMPINT_LT)"
+      else
+        retval += ",_CMP_LT_OQ)"
+      end
     when :eq then
       retval += "_cmp_#{suffix}_mask("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ",_CMP_EQ_OQ)"
+      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type)
+      if suffix =~ /epi/
+        retval += ",_MM_CMPINT_EQ)"
+      else
+        retval += ",_CMP_EQ_OQ)"
+      end
     when :neq then
       retval += "_cmp_#{suffix}_mask("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ",_CMP_NEQ_OQ)"
+        retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type)
+      if suffix =~ /epi/
+        retval += ",_MM_CMPINT_NE)"
+      else
+        retval += ",_CMP_NEQ_OQ)"
+      end
     when :and then
       if @lop.get_type == @lop.get_type
         retval += "_and_#{suffix}_mask("
