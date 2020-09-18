@@ -158,9 +158,13 @@ class Accumulate
         suffix = get_type_suffix_avx2(@type)
         imm8 = "0b1111" if size == 64
         imm8 = "0xb1" if size == 32
-        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},_mm256_shuffle_#{suffix}(#{src},#{src},#{imm8}));\n"
-        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},_mm256_shuffle_#{suffix}(#{src},#{src},0xee));\n" if @type == "F32"
-        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},_mm256_cast#{suffix}128_#{suffix}256(_mm256_extractf128_#{suffix}(#{src},1)));\n"
+        sh_suffix = "ps" if size == 32
+        sh_suffix = "pd" if size == 64
+        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},_mm256_shuffle_#{sh_suffix}(#{src},#{src},#{imm8}));\n"
+        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},_mm256_shuffle_#{sh_suffix}(#{src},#{src},0xee));\n" if size == 32
+        ext_suffix = "ps"
+        ext_suffix = "pd" if @type == "F64"
+        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},_mm256_cast#{ext_suffix}128_#{ext_suffix}256(_mm256_extractf128_#{ext_suffix}(#{src},1)));\n"
         dest_conv = "#{@dest.convert_to_code(conversion_type)}[0]"
         src_conv = "#{src}[0]"
         if op == "max" || op == "min"
@@ -319,8 +323,9 @@ end
             imm8 = "0b00000011" if type_single =~ /32/
           when 8
             abort "j_parallel of F64 must be <= 4" if type_single == /64/
-            imm8 = "0b00000001" if type_single == "F32"
+            imm8 = "0b00000001" if type_single =~ /32/
           end
+          abort "imm8 is nil. nj = #{ninj[1]}" if imm8 == nil
           for i in 0...n_split
             get_vector_elements(type).each{ |dim|
               dest = name
@@ -329,6 +334,8 @@ end
               dest = Expression.new([:dot,dest,dim,type_single]) if dim != ""
               src = Expression.new([:dot,src,dim,type_single]) if dim != ""
               suffix = get_type_suffix_avx2(type_single)
+              suffix = "ps"
+              suffix = "pd" if @type == "F64"
               ret += "#{dest.convert_to_code(conversion_type)} = _mm256_blend_#{suffix}(#{src.convert_to_code(conversion_type)},#{dest.convert_to_code(conversion_type)},#{imm8});\n"
             }
           end
@@ -348,12 +355,13 @@ end
             imm8 = "0b00000011" if type_single =~ /64/
             imm8 = "0b00001111" if type_single =~ /32/
           when 8
-            imm8 = "0b00000001" if type_single =~ /F64/
-            imm8 = "0b00000011" if type_single =~ /F32/
+            imm8 = "0b00000001" if type_single =~ /64/
+            imm8 = "0b00000011" if type_single =~ /32/
           when 16
             abort "j_parallel of F64 must be <= 8" if type_single == /64/
-            imm8 = "0b00000001" if type_single =~ /F32/
+            imm8 = "0b00000001" if type_single =~ /32/
           end
+          abort "imm is nil. type is #{type_single}" if imm8 == nil
           for i in 0...n_split
             get_vector_elements(type).each{ |dim|
               dest = name

@@ -283,8 +283,11 @@ class IntegerValue
     @type
   end
 
+  def replace_recursive(orig,replaced)
+    self.dup
+  end
   def replace_fdpsname_recursive(h=$varhash)
-    self
+    self.dup
   end
 
   def isJRelated(list)
