@@ -1,5 +1,5 @@
 CC=g++
-CCFLAGS= -O2 
+CCFLAGS= -O2 -std=c++11
 
 PIKG_ROOT=../../../
 PIKG=$(PIKG_ROOT)/bin/pikg
