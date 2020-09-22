@@ -203,17 +203,17 @@ class Expression
       retval += "_cmp_#{suffix}_mask("
       retval += @rop.convert_to_code(conversion_type) + "," + @lop.convert_to_code(conversion_type)
       if suffix =~ /epi/
-        retval += ",_MM_CMPINT_LE)"
+        retval += ",_MM_CMPINT_LT)"
       else
-        retval += ",_CMP_LE_OQ)"
+        retval += ",_CMP_LT_OQ)"
       end
     when :ge then
       retval += "_cmp_#{suffix}_mask("
       retval += @rop.convert_to_code(conversion_type) + "," + @lop.convert_to_code(conversion_type)
       if suffix =~ /epi/
-        retval += ",_MM_CMPINT_LT)"
+        retval += ",_MM_CMPINT_LE)"
       else
-        retval += ",_CMP_LT_OQ)"
+        retval += ",_CMP_LE_OQ)"
       end
     when :eq then
       retval += "_cmp_#{suffix}_mask("
