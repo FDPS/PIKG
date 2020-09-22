@@ -85,6 +85,28 @@ class Load
           ret += GatherLoad.new([dest,src,"0","#{offset_gather}",type]).convert_to_code(conversion_type)
         end
       else
+        abort "unsupported number of elemet (#{@nelem}) for Load" if nlane <= 0
+        index = String.new
+        if @iotype == "EPI" || @iotype == "FORCE"
+          p @nelem,nlane
+          for j in 0...@nelem
+            for i in 0...nlane
+              index += "," if !(i == 0 && j == 0)
+              index += "#{i*offset_gather}"
+            end
+          end
+        elsif @iotype == "EPJ"
+          for i in 0...nlane
+            for j in 0...@nelem
+              index += "," if !(i==0 && j==0)
+              index += "#{i*offset_gather}"
+            end
+          end
+        else
+          abort
+        end
+
+        ret += GatherLoad.new([dest,src,nil,nil,type]).convert_to_code(conversion_type,index)
       end
     when "A64FX"
       suffix = get_type_suffix_a64fx(type)
@@ -168,7 +190,7 @@ class Accumulate
         dest_conv = "#{@dest.convert_to_code(conversion_type)}[0]"
         src_conv = "#{src}[0]"
         if op == "max" || op == "min"
-          ret += "#{dest_conv} = #{op}(#{dest_conv},#{src_conv});"
+          ret += "#{dest_conv} = #{op}(#{dest_conv},(PIKG::#{@type})#{src_conv});"
         else
           case op
           when "add"
@@ -335,7 +357,7 @@ end
               src = Expression.new([:dot,src,dim,type_single]) if dim != ""
               suffix = get_type_suffix_avx2(type_single)
               suffix = "ps"
-              suffix = "pd" if @type == "F64"
+              suffix = "pd" if type_single =~ /64/
               ret += "#{dest.convert_to_code(conversion_type)} = _mm256_blend_#{suffix}(#{src.convert_to_code(conversion_type)},#{dest.convert_to_code(conversion_type)},#{imm8});\n"
             }
           end
@@ -771,7 +793,7 @@ end
                 src = PointerOf.new([type,src])
                 dest = name
                 dest = Expression.new([:dot,name,dim,type_single]) if type =~ /vec/
-                ret += [Load.new([dest,src,nelem,type_single,iotype])]
+                ret += [Load.new([dest,src,nelem*$max_element_size/get_single_data_size(type_single),type_single,iotype])]
               }
             end
             h[name] = [iotype,type,fdpsname,"alias"] if h[name] == nil
@@ -1004,6 +1026,7 @@ end
 
     def kernel_body_multi_prec(ninj,conversion_type,istart=0,h=$varhash)
       #accum_hash = generate_accum_hash(@statements,h)
+      return kernel_body(conversion_type,istart,h) if conversion_type == "reference"
 
       code = String.new
       kernel_body = Array.new
@@ -1083,6 +1106,7 @@ end
           end
         }
       }
+
       #p "split_vars:"
       #p split_vars
       iloop = generate_loop_begin_multi_prec(conversion_type,ninj[0]*$max_element_size/$min_element_size,"i",istart)
@@ -1096,6 +1120,7 @@ end
       jloop = generate_loop_begin_multi_prec(conversion_type,ninj[1],"j",0)
       jloop.statements += load_jvars(fvars,ninj[1],conversion_type)
       jloop.statements += generate_jloop_body(ss,fvars,split_vars,conversion_type)
+
       iloop.statements += [jloop]
       if ninj[1] > 1
         h.each{ |v|
