@@ -1208,7 +1208,6 @@ class MADD
   end
   
   def get_type(h = $varhash)
-    p self
     if @type == nil
       @type = derive_type(@operator,@aop,@bop,@cop,h)
     end
