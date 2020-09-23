@@ -353,7 +353,7 @@ class Declaration
     @type
   end
   def convert_to_code(conversion_type)
-    #p self
+    @type = @name.get_type if @type == nil
     "#{get_declare_type(@type,conversion_type)} #{@name.convert_to_code(conversion_type)};\n"
   end
 end
@@ -1429,10 +1429,10 @@ class Expression
       else
         type = "B16"
       end
-    elsif operator == :uminus || operator == :array || :not
+    elsif operator == :uminus || operator == :array || operator == :not
       type = lt
     elsif operator == :dot
-      if rop == "x" || rop == "y" || rop == "z"
+      if ["x","y","z"].index(rop)
         if lt == "F64vec"
           type = "F64"
         elsif lt == "F32vec"
