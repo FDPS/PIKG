@@ -1208,6 +1208,7 @@ class MADD
   end
   
   def get_type(h = $varhash)
+    p self
     if @type == nil
       @type = derive_type(@operator,@aop,@bop,@cop,h)
     end
@@ -1385,7 +1386,7 @@ class Expression
     type=nil
     lt = lop.get_type(h)
     rt = rop.get_type(h) if rop != nil && !["x","y","z","w"].index(rop) && operator != :array
-    abort "single element size of #{lop}(#{lt}) and #{rop}(#{rt}) are different" if rt != nil && get_single_data_size(lt) != get_single_data_size(rt)
+    abort "single element size of #{lop.convert_to_code("reference")}(#{lt}) and #{rop.convert_to_code("reference")}(#{rt}) are different" if rt != nil && get_single_data_size(lt) != get_single_data_size(rt)
     #print "derive type ", operator," ", lop," ", rop, "\n"
     #p self
     if [:plus, :minus, :mult, :div,:and,:or].index(operator)
