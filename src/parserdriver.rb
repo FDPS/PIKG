@@ -194,7 +194,6 @@ class Kernelprogram
               s.add_to_varhash
               s.type = type
             elsif $varhash[s.name.lop + "_" + s.name.rop] != nil
-              
             else
               abort  "left value must be vector or scalar variable"
             end
@@ -215,6 +214,7 @@ class Kernelprogram
       $varhash[x] = [nil,"S32",nil]
     }
 
+    #accumhash
     @statements.each{|s|
       if isStatement(s)
         head = get_name(s)
@@ -383,8 +383,12 @@ class Kernelprogram
     ret = []
     val = orig.name
     exp = orig.expression
-    ret += split_coefficients(exp)
-    ret += split_vector_expression(orig)
+    if exp.get_type =~ /vec/
+      ret += split_coefficients(exp)
+      ret += split_vector_expression(orig)
+    else
+      ret += [orig]
+    end
     ret
   end
 
@@ -1669,8 +1673,8 @@ program.check_references($varhash)
 program.generate_hash("noconversion")
 
 program.expand_function
-#program.statements.each{ |s| p s }
 program.expand_tree
+#program.statements.each{ |s| p s }
 program.make_conditional_branch_block
 program.disassemble_statement
 program.generate_prototype_decl_file if $c_interface_decl
