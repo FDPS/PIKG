@@ -73,20 +73,21 @@ class Expression
           when :plus
             case mul.operator
             when :mult
-              ret = MADD.new([:madd,mul.lop,mul.rop,@rop,@type])
+              ret = MADD.new([:madd,mul.lop,mul.rop,@rop])
             when :uminus
               abort "mult is not found actually" if mul.lop.operator != :mult
-              ret = MADD.new([:msub,mul.lop.lop,mul.lop.rop,@rop,@type])
+              ret = MADD.new([:msub,mul.lop.lop,mul.lop.rop,@rop])
             end
           when :minus
             case mul.operator
             when :mult
-              ret = MADD.new([:nmadd,mul.lop,mul.rop,rop,@type])
+              ret = MADD.new([:nmadd,mul.lop,mul.rop,rop])
             when :uminus
               abort "mult is not found actually" if mul.lop.operator != :mult
-              ret = MADD.new([:nmsub,mul.lop.lop,mul.lop.rop,@rop,@type])
+              ret = MADD.new([:nmsub,mul.lop.lop,mul.lop.rop,@rop])
             end
           end
+          ret.get_type
           #p "temporaly madd:",ret
           ret.aop = ret.aop.reduce_madd_recursive if !isLeaf(ret.aop)
           ret.bop = ret.bop.reduce_madd_recursive if !isLeaf(ret.bop)
