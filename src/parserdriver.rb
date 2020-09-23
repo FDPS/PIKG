@@ -1218,6 +1218,7 @@ class Kernelprogram
               related_vars.push(name)
               related_vars += s.expression.get_related_variable
             end
+          elsif s.class == Pragma
           else
             related_vars += s.expression.get_related_variable
           end

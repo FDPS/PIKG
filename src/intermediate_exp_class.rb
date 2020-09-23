@@ -711,6 +711,10 @@ class Pragma
     @name,@option = x
   end
 
+  def get_related_variable
+    []
+  end
+
   def convert_to_code(conversion_type)
     ret = "#pragma #{@name}"
     if @option != nil then
@@ -1279,19 +1283,33 @@ class MADD
       retval += @cop.convert_to_code(conversion_type) + ")"
     when /AVX2/
       self.get_type
-      case @operator
-      when :madd
-        retval += "_mm256_fmadd_#{get_type_suffix_avx2(@type)}("
-      when :msub
-        retval += "_mm256_fnmadd_#{get_type_suffix_avx2(@type)}("
-      when :nmadd
-        retval += "_mm256_fnmsub_#{get_type_suffix_avx2(@type)}("
-      when :nmsub
-        retval += "_mm256_fmsub_#{get_type_suffix_avx2(@type)}("
+      suffix = get_type_suffix_avx2(@type)
+      if @type =~ /F/
+        case @operator
+        when :madd
+          retval += "_mm256_fmadd_#{suffix}("
+        when :msub
+          retval += "_mm256_fnmadd_#{suffix}("
+        when :nmadd
+          retval += "_mm256_fnmsub_#{suffix}("
+        when :nmsub
+          retval += "_mm256_fmsub_#{suffix}("
+        end
+        retval += @aop.convert_to_code(conversion_type) + ","
+        retval += @bop.convert_to_code(conversion_type) + ","
+        retval += @cop.convert_to_code(conversion_type) + ")"
+      else
+        case @operator
+        when :madd
+          retval += "_mm256_add_#{suffix}(_mm256_mul_#{suffix}(" + @aop.convert_to_code(conversion_type) + "," + @bop.convert_to_code(conversion_type) + ")," + @cop.convert_to_code(conversion_type) + ")"
+        when :msub
+          retval += "_mm256_sub_#{suffix}(" + @cop.convert_to_code(conversion_type) + ",_mm256_mul_#{suffix}(" + @aop.convert_to_code(conversion_type) + "," + @bop.convert_to_code(conversion_type) + "))"
+        when :nmadd
+          retval += "_mm256_sub_#{suffix}(_ mm256_set1_#{suffix}(0)," + MADD.new([:madd,@aop,@bop,@cop,@type]).convert_to_code(conversion_type) + ")"
+        when :nmsub
+          retval += "_mm256_sub_#{suffix}(_mm256_mul_#{suffix}(" + @aop.convert_to_code(conversion_type) + "," + @bop.convert_to_code(conversion_type) + ")," + @cop.convert_to_code(conversion_type) + ")"
+        end
       end
-      retval += @aop.convert_to_code(conversion_type) + ","
-      retval += @bop.convert_to_code(conversion_type) + ","
-      retval += @cop.convert_to_code(conversion_type) + ")"
     when /AVX-512/
       self.get_type
       case @operator
@@ -1366,7 +1384,7 @@ class Expression
   def derive_type (operator,lop,rop,h=$varhash)
     type=nil
     lt = lop.get_type(h)
-    rt = rop.get_type(h) if rop != nil
+    rt = rop.get_type(h) if rop != nil && !["x","y","z","w"].index(rop) && operator != :array
     abort "single element size of #{lop}(#{lt}) and #{rop}(#{rt}) are different" if rt != nil && get_single_data_size(lt) != get_single_data_size(rt)
     #print "derive type ", operator," ", lop," ", rop, "\n"
     #p self
