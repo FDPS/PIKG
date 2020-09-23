@@ -102,6 +102,7 @@ class KernelParser
         | funccall           {result = val[0]}
 	| '-' binary =UMINUS {result = Expression.new([:uminus,val[1], nil])}
         | var
+	| number
 
   table: '{' args '}' {result = Table.new(val[1])}
 
@@ -110,18 +111,16 @@ class KernelParser
       | args ',' arg {result = val[0] + val[2]}
   arg: binary {result = [val[0]]}
 
-  var: IDENT               {result = val[0]}
-     | IDENT '.' IDENT     {result = Expression.new([:dot,val[0],val[2]])}
-     | "FORCE" '.' IDENT   {result = Expression.new([:dot,val[0],val[2]])}
-     | IDENT '[' var ']'   {result = Expression.new([:array,val[0],val[2]])}
-     | number
+  var: IDENT             {result = val[0]}
+     | var '.' IDENT     {result = Expression.new([:dot,val[0],val[2]])}
+     | IDENT '[' var ']' {result = Expression.new([:array,val[0],val[2]])}
 
-  number: DEC                {result = IntegerValue.new(val[0])}
-        | DEC 'l'            {result = IntegerValue.new(val[0]+val[1])}
-        | DEC 's'            {result = IntegerValue.new(val[0]+val[1])}
-        | DEC 'u'            {result = IntegerValue.new(val[0]+val[1])}
-        | DEC "ul"           {result = IntegerValue.new(val[0]+val[1])}
-        | DEC "us"           {result = IntegerValue.new(val[0]+val[1])}
+  number: DEC             {result = IntegerValue.new(val[0])}
+        | DEC 'l'         {result = IntegerValue.new(val[0]+val[1])}
+        | DEC 's'         {result = IntegerValue.new(val[0]+val[1])}
+        | DEC 'u'         {result = IntegerValue.new(val[0]+val[1])}
+        | DEC "ul"        {result = IntegerValue.new(val[0]+val[1])}
+        | DEC "us"        {result = IntegerValue.new(val[0]+val[1])}
         | DEC '.' DEC     {result = FloatingPoint.new(val[0]+val[1]+val[2])}
 	| DEC '.' DEC "f" {result = FloatingPoint.new(val[0]+val[1]+val[2]+val[3])}
         | DEC '.' DEC "h" {result = FloatingPoint.new(val[0]+val[1]+val[2]+val[3])}
@@ -340,7 +339,7 @@ def on_error(id,val,stack)
   line1 = line1.join('')
 
   #warning = "parse error :line #{lineno}: #{line}"
-  warning = line0 + line1
+  warning = line0 + line1 + "\n"
   for i in 1..line0.length
     warning += " "
   end
