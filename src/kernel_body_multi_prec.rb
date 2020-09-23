@@ -144,7 +144,7 @@ class Accumulate
     tot, max_byte_size, is_uniform = count_class_member("FORCE")
     type_single = get_single_element_type(@type)
     size = get_single_data_size(type_single)
-    lane_size = get_simd_width(conversion_type) / size
+    lane_size = get_simd_width(conversion_type) / $max_element_size
     nlane = lane_size / @nelem
 
     offset_scatter = ((tot+max_byte_size-1)/max_byte_size * max_byte_size) / byte_count(type_single)
@@ -998,7 +998,7 @@ end
               tmp_nsplit = Array.new
               bss.each{ |bs|
                 if fvars.index(get_name(bs)) != nil
-                  n = get_single_data_size(bs.type) / $min_element_size
+                  n = get_single_data_size(bs.get_type) / $min_element_size
                   if n > 1
                     tmp_nsplit.push(n)
                   end
