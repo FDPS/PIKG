@@ -113,7 +113,7 @@ class KernelParser
 
   var: IDENT             {result = val[0]}
      | var '.' IDENT     {result = Expression.new([:dot,val[0],val[2]])}
-     | IDENT '[' var ']' {result = Expression.new([:array,val[0],val[2]])}
+     | IDENT '[' number ']' {result = Expression.new([:array,val[0],val[2]])}
 
   number: DEC             {result = IntegerValue.new(val[0])}
         | DEC 'l'         {result = IntegerValue.new(val[0]+val[1])}
