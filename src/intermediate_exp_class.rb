@@ -814,7 +814,7 @@ class IfElseState
         $predicate_queue.pop
         $nest_queue.pop
         abort "pg_count < 0" if $pg_count < 0
-        $current_predicate = "pg#{$pg_count}"
+        $current_predicate = $predicate_queue.pop #"pg#{$pg_count}"
         ret += "}\n"
       else
         abort "undefined operator of IfElseState: #{@operator}"
