@@ -810,6 +810,7 @@ class IfElseState
           ret += Statement.new([$current_predicate,Expression.new([:land,$current_predicate,predicate,type]),type,nil]).convert_to_code(conversion_type) + "\n"
         }
         $nest_queue.push($current_predicate)
+        $predicate_queue.push($current_predicate)
       when :endif
         $predicate_queue.pop
         $nest_queue.pop
