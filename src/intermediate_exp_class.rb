@@ -22,7 +22,7 @@ class Loop
   def initialize(x)
     @index,@loop_beg,@loop_end,@interval,@statements = x
   end
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     ret = ""
     ret += "for("
     ret += "#{@index} = #{@loop_beg}" if @loop_beg  != nil
@@ -47,7 +47,7 @@ class ILoop
   def initialize(x)
     @statements = x
   end
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     ret = ""
     case conversion_type
     when "reference"
@@ -135,7 +135,7 @@ class ConditionalBranch
     ret
   end
 
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     ret = ""
     conditions.zip(bodies){ |c,b|
       #p [c,b]
@@ -179,7 +179,7 @@ class TableDecl
     end
   end
 
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     case conversion_type
     when "reference"
       ret = "PIKG::#{@type} #{@name}[] = {"
@@ -243,7 +243,7 @@ class FloatingPoint
     end
   end
 
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     case conversion_type
     when "reference"
       @val
@@ -298,7 +298,7 @@ class IntegerValue
     []
   end
 
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     case conversion_type
     when "reference"
       case @type
@@ -352,14 +352,14 @@ class Declaration
     @type = @name.get_type(h) if @type==nil
     @type
   end
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     @type = @name.get_type if @type == nil
     "#{get_declare_type(@type,conversion_type)} #{@name.convert_to_code(conversion_type)};\n"
   end
 end
 
 class NonSimdDecl < Declaration
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     #p self
     "#{get_declare_type(@type,"reference")} #{@name.convert_to_code("reference")};\n"
   end
@@ -387,7 +387,7 @@ class ReturnState
     @ret = x
   end
 
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     retval = "return " + ret.convert_to_code(conversion_type) + ";\n"
     retval
   end
@@ -481,7 +481,7 @@ class Statement
     ret
   end
 
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     #p self
     #p @name
     #p $varhash[@name]
@@ -497,7 +497,7 @@ class Statement
 end
 
 class NonSimdState < Statement
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     @name.convert_to_code("reference") + " = " + @expression.convert_to_code("reference") + ";"
   end
 end
@@ -675,7 +675,7 @@ class FuncCall
     }
   end
   
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     case conversion_type
     when "reference" then
       retval = @name
@@ -715,7 +715,7 @@ class Pragma
     []
   end
 
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     ret = "#pragma #{@name}"
     if @option != nil then
       @option.each{ |x|
@@ -739,7 +739,7 @@ class IfElseState
   def fusion_iotag(iotag)
     @expression = @expression.fusion_iotag(iotag) if @operator == :if || @operator == :elsif
   end
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     ret = ""
     case conversion_type
     when "reference"
@@ -836,7 +836,7 @@ class StoreState
     @type = @dest.get_type if @type == nil
     @type
   end
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     case conversion_type
     when "reference"
       ret = @dest.convert_to_code(conversion_type) + "=" + @src.convert_to_code(conversion_type) + ";"
@@ -863,7 +863,7 @@ class LoadState
     @type = @dest.get_type if @type == nil
     @type
   end
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     case conversion_type
     when "reference"
       ret = @dest.convert_to_code(conversion_type) + "=" + @src.convert_to_code(conversion_type) + ";"
@@ -910,7 +910,7 @@ class PointerOf
   def get_type(h = $varhash)
     @exp.get_type(h)
   end
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     case conversion_type
     when "reference"
       ret = @exp.convert_to_code(conversion_type)
@@ -1070,7 +1070,7 @@ class StructureLoad
     @dest,@src,@nelem,@type = x
     abort "nelem must be 1 to 4" if nelem > 4 || nelem <= 0
   end
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     ret = ""
     case conversion_type
     when /A64FX/
@@ -1119,7 +1119,7 @@ class StructureStore
     @dest,@src,@nelem,@type = x
     abort "nelem must be 1 to 4" if nelem > 4 || nelem <= 0
   end
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     ret = ""
     case conversion_type
     when /A64FX/
@@ -1170,7 +1170,7 @@ class Duplicate
     @type = @expression.get_type(h) if @type == nil
     @type
   end
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     case conversion_type
     when "reference"
       ret = "#{@name.convert_to_code(conversion_type)} = #{@expression.convert_to_code(conversion_type)};"
@@ -1250,7 +1250,7 @@ class MADD
     }
   end
   
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     retval=""
     case conversion_type
     when "reference" then
@@ -1345,7 +1345,7 @@ class Merge
     @op2 = @op2.replace_recursive(orig,replaced)
     self.dup
   end
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     ret = ""
     case conversion_type
     when /reference/
@@ -1628,7 +1628,7 @@ class Expression
     }
   end
 
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     #p self
     retval=""
     case conversion_type
@@ -1661,7 +1661,7 @@ class Expression
 end
 
 class NonSimdExp < Expression
-  def convert_to_code(conversion_type)
+  def convert_to_code(conversion_type="reference")
     super("reference")
   end
 end

@@ -33,7 +33,10 @@ class Expression
       leaf = false if found
     when :minus
       ret,found,leaf = @rop.find_mul(replaced) if !isLeaf(@rop)
-      @rop = replaced if found && leaf
+      if found && leaf
+        @rop = replaced
+        @operator = :plus
+      end
       ret = Expression.new([:uminus,ret,nil]) if found
       if !found
         ret,found,leaf = @lop.find_mul(replaced) if !isLeaf(@lop)
@@ -52,8 +55,24 @@ class Expression
   end
 
   def reduce_madd_recursive2
-    if @operator == :plus || @operator == :minus
-    elsif @operator == :mult
+    tmp = self
+    if @lop.operator == :uminus
+      case @operator
+      when :plus
+        tmp = Expression.new([:minus,@rop,@lop.lop,@type])
+      when :minus
+        tmp = Expression.new([:uminus,Expression.new([:plus,@lop.lop,@rop]),nil,@type])
+      when :mult
+      when :div
+      end
+    end
+
+    case @opreator
+    when :plus
+      if @lop.operator == :mult
+        ret = MADD.new([:madd,@lop.lop,@lop.rop,@rop,@type])
+      end
+    when :minus
     else
     end
   end

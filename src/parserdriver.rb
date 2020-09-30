@@ -1485,7 +1485,7 @@ class String
     ret
   end
   
-  def convert_to_code(conversion_type,h=$varhash)
+  def convert_to_code(conversion_type="reference",h=$varhash)
     s=self
     #print "convert to code #{s}\n"
     #p $varhash[self]
@@ -1672,10 +1672,8 @@ end
 program.check_references($varhash)
 
 program.generate_hash("noconversion")
-
 program.expand_function
 program.expand_tree
-#program.statements.each{ |s| p s }
 program.make_conditional_branch_block
 program.disassemble_statement
 program.generate_prototype_decl_file if $c_interface_decl
