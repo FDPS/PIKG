@@ -241,6 +241,37 @@ def get_declare_type(type,conversion_type)
     decl = get_declare_type_avx2(type)
   when /AVX-512/
     decl = get_declare_type_avx512(type)
+  when /CUDA/
+    case type
+    when "S32"
+      decl = "int"
+    when "S64"
+      decl = "long long"
+    when "U32"
+      decl = "unsigned int"
+    when "U64"
+      decl = "unsigned long long"
+    when "F64"
+     decl =  "double"
+    when "F32"
+      decl = "float"
+    when "F64vec"
+      decl = "double3"
+    when "F32vec"
+      decl = "float3"
+    when "F64vec4"
+      decl = "double4"
+    when "F32vec4"
+      decl = "float4"
+    when "F64vec2"
+      decl = "double2"
+    when "F32vec2"
+      decl = "float2"
+    when "F64vec3"
+      decl = "double3"
+    when "F32vec3"
+      decl = "float3"
+    end
   else
     abort "error: unsupported conversion_type #{conversion_type} at get_declare_type"
   end

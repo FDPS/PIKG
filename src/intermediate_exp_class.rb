@@ -1255,7 +1255,8 @@ class MADD
     when "reference" then
       case @operator
       when :madd then
-        retval = "std::fma(#{@aop.convert_to_code(conversion_type)},#{@bop.convert_to_code(conversion_type)},#{@cop.convert_to_code(conversion_type)})"
+      #retval = "std::fma(#{@aop.convert_to_code(conversion_type)},#{@bop.convert_to_code(conversion_type)},#{@cop.convert_to_code(conversion_type)})"
+        retval = "(#{@aop.convert_to_code(conversion_type)}*#{@bop.convert_to_code(conversion_type)}+#{@cop.convert_to_code(conversion_type)})"
       when :msub then
         retval = "(#{@cop.convert_to_code(conversion_type)} - #{@aop.convert_to_code(conversion_type)}*#{@bop.convert_to_code(conversion_type)})"
       when :nmadd then

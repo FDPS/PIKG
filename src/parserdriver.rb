@@ -12,6 +12,7 @@ require_relative "kernel_body_multi_prec.rb"
 require_relative "A64FX.rb"
 require_relative "AVX-512.rb"
 require_relative "AVX2.rb"
+require_relative "CUDA.rb"
 
 $dimension = 3
 $reserved_function = ["rsqrt","sqrt","inv","max","min","madd","msub","nmadd","nmsub","table","to_int","to_uint","to_float","to_f16","to_f32","to_f64","to_f16vec","to_f32vec","to_f64vec","to_f16vec2","to_f32vec2","to_f64vec2","to_f16vec3","to_f32vec3","to_f64vec3","to_f16vec4","to_f32vec4","to_f64vec4","to_s16","to_s32","to_s64","to_u16","to_u32","to_u64"]
@@ -1683,6 +1684,8 @@ if $is_multi_walk
   program.generate_optimized_code_multi_walk($conversion_type);
 else
   case $conversion_type
+  when "CUDA"
+    program.generate_optimized_cuda_kernel($conversion_type)
   when "A64FX"
     program.generate_optimized_code($conversion_type)
   else
