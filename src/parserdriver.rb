@@ -106,6 +106,7 @@ def generate_force_related_map(ss,h=$varhash)
   ss.reverse_each{ |s|
     if isStatement(s)
       name = get_name(s)
+      next if h[name][3] == "local"
       if h[name][0] == "FORCE"
         fvars += [name]
       end
@@ -546,15 +547,15 @@ class Kernelprogram
     code += "PIKG::U32  to_uint(PIKG::F32 op){return (PIKG::U32)op;}\n"
 
     
-    code += "template<typename T> PIKG::F64 to_f64(const T& op){return (PIKG::F64)op;}"
-    code += "template<typename T> PIKG::F32 to_f32(const T& op){return (PIKG::F32)op;}"
-    #code += "template<typename T> PIKG::F16 to_f16(const T& op){return (PIKG::F16)op;}"
-    code += "template<typename T> PIKG::S64 to_s64(const T& op){return (PIKG::S64)op;}"
-    code += "template<typename T> PIKG::S32 to_s32(const T& op){return (PIKG::S32)op;}"
-    #code += "template<typename T> PIKG::S16 to_s16(const T& op){return (PIKG::S16)op;}"
-    code += "template<typename T> PIKG::U64 to_u64(const T& op){return (PIKG::U64)op;}"
-    code += "template<typename T> PIKG::U32 to_u32(const T& op){return (PIKG::U32)op;}"
-    #code += "template<typename T> PIKG::U16 to_u16(const T& op){return (PIKG::U16)op;}"
+    code += "template<typename T> PIKG::F64 to_f64(const T& op){return (PIKG::F64)op;}\n"
+    code += "template<typename T> PIKG::F32 to_f32(const T& op){return (PIKG::F32)op;}\n"
+    #code += "template<typename T> PIKG::F16 to_f16(const T& op){return (PIKG::F16)op;}\n"
+    code += "template<typename T> PIKG::S64 to_s64(const T& op){return (PIKG::S64)op;}\n"
+    code += "template<typename T> PIKG::S32 to_s32(const T& op){return (PIKG::S32)op;}\n"
+    #code += "template<typename T> PIKG::S16 to_s16(const T& op){return (PIKG::S16)op;}\n"
+    code += "template<typename T> PIKG::U64 to_u64(const T& op){return (PIKG::U64)op;}\n"
+    code += "template<typename T> PIKG::U32 to_u32(const T& op){return (PIKG::U32)op;}\n"
+    #code += "template<typename T> PIKG::U16 to_u16(const T& op){return (PIKG::U16)op;}\n"
 
     #code += "PIKG::F64 table(const PIKG::F64 tab[],const PIKG::U32 index){ return tab[index];);\n"
     #code += "PIKG::F32 table(const PIKG::F32 tab[],const PIKG::U32 index){ return tab[index];);\n"

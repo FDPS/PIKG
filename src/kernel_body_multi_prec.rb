@@ -759,7 +759,7 @@ end
         dst = Expression.new([:dot,name,dim,type_single]) if dim != ""
         src = PointerOf.new([type_single,Expression.new([:array,"#{name}_tmp","#{ij}+#{offset}",])])
         src = PointerOf.new([type_single,Expression.new([:array,"#{name}_tmp_"+dim,"#{ij}+#{offset}",])]) if dim != ""
-        ret += [Load.new([dst,src,nelem,type_single,iotype,"local"])]
+        ret += [Load.new([dst,src,nelem*$max_element_size/get_single_data_size(type_single),type_single,iotype,"local"])]
       }
       ret
     end
