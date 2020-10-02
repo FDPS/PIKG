@@ -615,91 +615,6 @@ end
       ret
     end
 
-    class Fusion
-      attr_accessor :ops,:from, :to
-      def initialize(x)
-        @ops, @from, @to = x
-        abort "type of Fusion must be specified" if @from == nil || @to == nil
-      end
-      def convert_to_code(conversion_type)
-        ret = String.new
-        n = @ops.length
-        case conversion_type
-        when "reference"
-        # do nothing
-        when "AVX2"
-          case n
-          when 1
-            abort "Fusion does not happen for single operand"
-          when 2
-            if @from == "F64" && @to == "F32"
-              ret = "_mm256_permute2f128_ps("
-              for i in 0...n
-                ret += "," if i>0
-                ret += "_mm256_castps128_ps256(_mm256_cvtpd_ps(#{ops[i]}))"
-              end
-              ret += ",0x20)"
-            else
-              abort "Fusion for AVX2 under construction"
-            end
-          else
-            abort "Fusion of #{n} does not happen for AVX2"
-          end
-
-        when "AVX-512"
-          case n
-          when 1
-            abort "Fusion does not happen for single operand"
-          when 2
-            if @from == "F64" && @to == "F32"
-              ret = "_mm512_insertf32x8(_mm512_castps256_ps512(_mm512_cvtpd_ps(#{ops[0]})),_mm512_cvtpd_ps(#{ops[1]}),1)"
-            end
-          else
-            abort "Fusion #{n} for AVX2 under construction"
-          end
-        else
-          abort "unsupported conversion_type #{coversion_type} for Fusion"
-        end
-        ret
-      end
-    end
-
-    class Fission
-      attr_accessor :op,:from, :to, :index
-      def initialize(x)
-        @op, @from, @to, @index = x
-        abort "type of Fision must be specified" if @from == nil || @to == nil
-        abort "index must be specified" if @index == nil
-      end
-      def convert_to_code(conversion_type)
-        ret = String.new
-        case conversion_type
-        when "reference"
-        # do nothing
-        when "AVX2"
-          if @from == "F32" && @to == "F64"
-            ret = @op.convert_to_code(conversion_type)
-            ret = "_mm256_castps256_ps128(#{ret})"  if @index == 0
-            ret = "_mm256_extractf128_ps(#{ret},1)" if @index == 1
-            ret = "_mm256_cvtps_pd(#{ret})"
-          else
-            abort "under costruction for AVX2 : Fission"
-          end
-        when "AVX-512"
-          if @from == "F32" && @to == "F64"
-            ret = @op.convert_to_code(conversion_type)
-            ret = "_mm512_castps512_ps256(#{ret})"  if @index == 0
-            ret = "_mm512_extractf32x8_ps(#{ret},1)" if @index == 1
-            ret = "_mm512_cvtps_pd(#{ret})"
-          else
-            abort "under costruction for AVX2 : Fission"
-          end
-        else
-          abort "unsupported conversion_type #{conversion_type} for Fission"
-        end
-        ret
-      end
-    end
 
     def split_downcast(ss)
       reet = Array.new
@@ -815,22 +730,29 @@ end
           modifier = h[v][3]
 
           name = v
-          ret += [Declaration.new([type,name])]
           if modifier == "local"
+            ret += [Declaration.new([type,name])]
             ret += load_local_var(name,type,nelem,iotype)
           else
             tot, max_byte_size, is_uniform = count_class_member(iotype)
             type_single = get_single_element_type(type)
             offset_gather = ((tot+max_byte_size-1)/max_byte_size * max_byte_size) / byte_count(type_single)
-            get_vector_elements(type).each{ |dim|
-              index = "j"
-              src = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),index]),fdpsname,type_single])
-              src = Expression.new([:dot,src,dim,type_single]) if type =~ /vec/
-              src = PointerOf.new([type,src])
-              dest = name
-              dest = Expression.new([:dot,name,dim,type_single]) if type =~ /vec/
-              ret += [Load.new([dest,src,nelem,type_single,iotype])]
-            }
+            nsplit = get_single_data_size(type) / $min_element_size
+            nsplit = 1 if conversion_type == "reference"
+            for i in 0...nsplit
+              suffix = String.new
+              suffix = "_#{i}" if nsplit > 1
+              ret += [Declaration.new([type,name+suffix])]
+              get_vector_elements(type).each{ |dim|
+                index = "j+#{i*nelem}"
+                src = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),index]),fdpsname,type_single])
+                src = Expression.new([:dot,src,dim,type_single]) if type =~ /vec/
+                src = PointerOf.new([type,src])
+                dest = name + suffix
+                dest = Expression.new([:dot,name,dim,type_single]) if type =~ /vec/
+                ret += [Load.new([dest,src,nelem,type_single,iotype])]
+              }
+            end
           end
         end
       }
@@ -895,7 +817,7 @@ end
       ret
     end
 
-    def generate_jloop_body(ss,fvars,split_vars,conversion_type,h=$varhash,insideConditionalBranch = false)
+    def generate_jloop_body(ss,fvars,split_vars,conversion_type,h=$varhash,insideConditionalBranch = false,split_index = 0)
       ret = Array.new
       if !insideConditionalBranch
         ss.each{ |s|
@@ -1001,6 +923,12 @@ end
             tmp_cbb.conditions = s.conditions
             tmp_predicate = Array.new
             s.bodies.zip(s.conditions){ |bss,cond|
+              cond_vars = cond.get_related_variable
+              nsplit = 1
+              cond_vars.each{|v|
+                ntmp = get_single_data_size($varhash[v][1]) / $min_element_size
+                nsplit = ntmp if nsplit < ntmp
+              }
               tmp = Array.new
               tmp_nsplit = Array.new
               bss.each{ |bs|
@@ -1016,7 +944,6 @@ end
               }
               tmp_predicate.push(tmp)
             }
-            
             s.bodies.zip(tmp_predicate){ |bss,pss|
               tmp_cbb.bodies.push(pss + generate_jloop_body(bss,fvars,split_vars,conversion_type,h))
             }

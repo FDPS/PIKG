@@ -762,7 +762,10 @@ class IfElseState
       if $nest_queue == nil
         $nest_queue = Array.new()
       end
-      type = "B" + sizeof(@expression.get_type) if @expression != nil
+      if @expression != nil
+        size = sizeof(@expression.get_type)
+        type = "B#{size}"
+      end
       ret = ""
       pg_accum = "pg_accum"
       case @operator
@@ -774,11 +777,31 @@ class IfElseState
         $current_predicate = "pg#{$pg_count}"
         $varhash[$current_predicate] = [nil,type,nil,nil]
         $pg_count += 1
-        exp = @expression
-        ret += Declaration.new([type,$current_predicate]).convert_to_code(conversion_type)
-        ret += Declaration.new([type,$accumulate_predicate]).convert_to_code(conversion_type)
-        ret += Statement.new([$current_predicate,exp,type]).convert_to_code(conversion_type) + "\n"
-        ret += Statement.new([$accumulate_predicate,$current_predicate,type,nil]).convert_to_code(conversion_type) + "\n"
+        nsplit = size/$min_element_size
+        nsplit = 1 if conversion_type == "reference"
+        pred_ops = Array.new
+        accum_ops = Array.new
+        for i in 0...nsplit
+          exp = @expression
+          suffix = String.new
+          suffix = "_#{i}" if nsplit > 1
+          ret += Declaration.new([type,$current_predicate+suffix]).convert_to_code(conversion_type)
+          ret += Declaration.new([type,$accumulate_predicate+suffix]).convert_to_code(conversion_type)
+          exp.get_related_variable.each{ |v|
+            exp = exp.replace_recursive(v,v+suffix)
+          }
+          ret += Statement.new([$current_predicate+suffix,exp,type]).convert_to_code(conversion_type) + "\n"
+          ret += Statement.new([$accumulate_predicate+suffix,$current_predicate+suffix,type,nil]).convert_to_code(conversion_type) + "\n"
+          pred_ops.push($current_predicate + suffix)
+          accum_ops.push($accumulate_predicate + suffix)
+        end
+        if nsplit > 1
+          ret += Declaration.new([type,$current_predicate]).convert_to_code(conversion_type)
+          ret += Declaration.new([type,$accumulate_predicate]).convert_to_code(conversion_type)
+          ret += Statement.new([$current_predicate,Fusion.new([pred_ops,type,"B#{$min_element_size}"])]).convert_to_code(conversion_type) + "\n" if
+          ret += Statement.new([$accumulate_predicate,Fusion.new([accum_ops,type,"B#{$min_element_size}"])]).convert_to_code(conversion_type) + "\n"
+          p ret
+        end
         if $nest_queue.empty?
         else
           $nest_queue.each{ |predicate|
@@ -793,10 +816,31 @@ class IfElseState
         $current_predicate = "pg#{$pg_count}"
         $varhash[$current_predicate] = [nil,type,nil,nil]
         $pg_count += 1
-        ret += Declaration.new([type,$current_predicate]).convert_to_code(conversion_type) + "\n"
-        ret += Statement.new([tmp_predicate,@expression,type]).convert_to_code(conversion_type) + "\n"
-        ret += Statement.new([$current_predicate,Expression.new([:landnot,tmp_predicate,$accumulate_predicate]),type,nil]).convert_to_code(conversion_type) + "\n"
-        ret += Statement.new([$accumulate_predicate,Expression.new([:lor,$accumulate_predicate,tmp_predicate,type]),type,nil]).convert_to_code(conversion_type) + "\n"
+        nsplit = size/$min_element_size
+        nsplit = 1 if conversion_type == "reference"
+        pred_ops = Array.new
+        accum_ops = Array.new
+        for i in 0...nsplit
+          exp = @expression
+          suffix = String.new
+          suffix = "_#{i}" if nsplit > 1
+          ret += Declaration.new([type,$current_predicate+suffix]).convert_to_code(conversion_type)
+          ret += Declaration.new([type,$accumulate_predicate+suffix]).convert_to_code(conversion_type)
+          exp.get_related_variable.each{ |v|
+            exp = exp.replace_recursive(v,v+suffix)
+          }
+          ret += Statement.new([$current_predicate+suffix,exp,type]).convert_to_code(conversion_type) + "\n"
+          ret += Statement.new([$accumulate_predicate+suffix,$current_predicate+suffix,type,nil]).convert_to_code(conversion_type) + "\n"
+          pred_ops.push($current_predicate + suffix)
+          accum_ops.push($accumulate_predicate + suffix)
+        end
+        if nsplit > 1
+          ret += Declaration.new([type,$current_predicate]).convert_to_code(conversion_type)
+          ret += Declaration.new([type,$accumulate_predicate]).convert_to_code(conversion_type)
+          ret += Statement.new([$current_predicate,Fusion.new([pred_ops,type,"B#{$min_element_size}"])]).convert_to_code(conversion_type) + "\n" if
+          ret += Statement.new([$accumulate_predicate,Fusion.new([accum_ops,type,"B#{$min_element_size}"])]).convert_to_code(conversion_type) + "\n"
+          p ret
+        end
         $nest_queue.each{ |predicate|
           ret += Statement.new([$current_predicate,Expression.new([:land,$current_predicate,predicate,type]),type,nil]).convert_to_code(conversion_type) + "\n"
         }
@@ -1583,20 +1627,23 @@ class Expression
   end
 
   def replace_recursive(orig,replaced)
+    lop = @lop.dup
+    rop = @rop.dup
+    type = @type.dup
     if @operator == :dot
       if orig.class == Expression && orig.operator == :dot
-        if @lop.class == String
-          @lop = replaced if @lop == orig.lop && @rop == orig.rop
+        if lop.class == String
+          lop = replaced if lop == orig.lop && rop == orig.rop
         end
       else
-        @lop = @lop.replace_recursive(orig,replaced)
-        @rop = @rop.replace_recursive(orig,replaced) if @rop != nil
+        lop = lop.replace_recursive(orig,replaced)
+        rop = rop.replace_recursive(orig,replaced) if rop != nil
       end
     else
-      @lop = @lop.replace_recursive(orig,replaced)
-      @rop = @rop.replace_recursive(orig,replaced) if @rop != nil
+      lop = lop.replace_recursive(orig,replaced)
+      rop = rop.replace_recursive(orig,replaced) if rop != nil
     end
-    self.dup
+    Expression.new([@operator,lop,rop,type])
   end
   def replace_fdpsname_recursive(h=$varhash)
     #p self
@@ -1663,5 +1710,98 @@ end
 class NonSimdExp < Expression
   def convert_to_code(conversion_type="reference")
     super("reference")
+  end
+end
+
+class Fusion
+  attr_accessor :ops,:from, :to
+  def initialize(x)
+    @ops, @from, @to = x
+    abort "type of Fusion must be specified" if @from == nil || @to == nil
+  end
+  def convert_to_code(conversion_type)
+    ret = String.new
+    n = @ops.length
+    case conversion_type
+    when "reference"
+    # do nothing
+    when "AVX2"
+      case n
+      when 1
+        abort "Fusion does not happen for single operand"
+      when 2
+        if @from == "F64" && @to == "F32"
+          ret = "_mm256_permute2f128_ps("
+          for i in 0...n
+            ret += "," if i>0
+            ret += "_mm256_castps128_ps256(_mm256_cvtpd_ps(#{ops[i]}))"
+          end
+          ret += ",0x20)"
+        elsif @from == "B64" && @to == "B32"
+          ret = "_mm256_permute2f128_ps("
+          for i in 0...n
+            ret += "," if i>0
+            ret += "_mm256_castsi256_ps(_mm256_castsi128_si256(_mm256_cvtepi64_epi32(_mm256_castps_si256(#{ops[i]}))))"
+          end
+          ret += ",0x20)"
+        else
+          abort "Fusion from #{@from} to #{@to} with AVX2 under construction"
+        end
+      else
+        abort "Fusion of #{n} does not happen for AVX2"
+      end
+
+    when "AVX-512"
+      case n
+      when 1
+        abort "Fusion does not happen for single operand"
+      when 2
+        if @from == "F64" && @to == "F32"
+          ret = "_mm512_insertf32x8(_mm512_castps256_ps512(_mm512_cvtpd_ps(#{ops[0]})),_mm512_cvtpd_ps(#{ops[1]}),1)"
+        end
+      else
+        abort "Fusion #{n} for AVX2 under construction"
+      end
+    else
+      abort "unsupported conversion_type #{coversion_type} for Fusion"
+    end
+    ret
+  end
+end
+
+class Fission
+  attr_accessor :op,:from, :to, :index
+  def initialize(x)
+    @op, @from, @to, @index = x
+    abort "type of Fision must be specified" if @from == nil || @to == nil
+    abort "index must be specified" if @index == nil
+  end
+  def convert_to_code(conversion_type)
+    ret = String.new
+    case conversion_type
+    when "reference"
+    # do nothing
+    when "AVX2"
+      if @from == "F32" && @to == "F64"
+        ret = @op.convert_to_code(conversion_type)
+        ret = "_mm256_castps256_ps128(#{ret})"  if @index == 0
+        ret = "_mm256_extractf128_ps(#{ret},1)" if @index == 1
+        ret = "_mm256_cvtps_pd(#{ret})"
+      else
+        abort "under costruction for AVX2 : Fission"
+      end
+    when "AVX-512"
+      if @from == "F32" && @to == "F64"
+        ret = @op.convert_to_code(conversion_type)
+        ret = "_mm512_castps512_ps256(#{ret})"  if @index == 0
+        ret = "_mm512_extractf32x8_ps(#{ret},1)" if @index == 1
+        ret = "_mm512_cvtps_pd(#{ret})"
+      else
+        abort "under costruction for AVX2 : Fission"
+      end
+    else
+      abort "unsupported conversion_type #{conversion_type} for Fission"
+    end
+    ret
   end
 end
