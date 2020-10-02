@@ -763,6 +763,7 @@ class IfElseState
         $nest_queue = Array.new()
       end
       if @expression != nil
+        abort if !(@expression.get_type =~ /(F|S|B|U)(64|32|16)/)
         size = sizeof(@expression.get_type)
         type = "B#{size}"
       end
@@ -800,7 +801,6 @@ class IfElseState
           ret += Declaration.new([type,$accumulate_predicate]).convert_to_code(conversion_type)
           ret += Statement.new([$current_predicate,Fusion.new([pred_ops,type,"B#{$min_element_size}"])]).convert_to_code(conversion_type) + "\n" if
           ret += Statement.new([$accumulate_predicate,Fusion.new([accum_ops,type,"B#{$min_element_size}"])]).convert_to_code(conversion_type) + "\n"
-          p ret
         end
         if $nest_queue.empty?
         else
@@ -839,7 +839,6 @@ class IfElseState
           ret += Declaration.new([type,$accumulate_predicate]).convert_to_code(conversion_type)
           ret += Statement.new([$current_predicate,Fusion.new([pred_ops,type,"B#{$min_element_size}"])]).convert_to_code(conversion_type) + "\n" if
           ret += Statement.new([$accumulate_predicate,Fusion.new([accum_ops,type,"B#{$min_element_size}"])]).convert_to_code(conversion_type) + "\n"
-          p ret
         end
         $nest_queue.each{ |predicate|
           ret += Statement.new([$current_predicate,Expression.new([:land,$current_predicate,predicate,type]),type,nil]).convert_to_code(conversion_type) + "\n"
@@ -1402,9 +1401,9 @@ class Merge
       suffix = get_type_suffix_avx2(@type)
       predicate = $current_predicate
       predicate += "_#{@split_index}" if @split_index != nil
-       # inactive elements come from first input
+      # inactive elements come from first input
       if suffix == "epi32"
-        ret = "_mm256_blendv_ps(_mm256_castsi256_ps(#{@op2.convert_to_code(conversion_type)}),_mm256_castsi256_ps(#{@op1.convert_to_code(conversion_type)}),#{predicate});"
+        ret = "_mm256_castps_si256(_mm256_blendv_ps(_mm256_castsi256_ps(#{@op2.convert_to_code(conversion_type)}),_mm256_castsi256_ps(#{@op1.convert_to_code(conversion_type)}),#{predicate}));"
       elsif suffix == "epi64"
         predicate = "_mm256_castsi256_pd(" + predicate + ")"
         ret = "_mm256_blendv_pd(_mm256_castsi256_pd(#{@op2.convert_to_code(conversion_type)}),_mm256_castsi256_pd(#{@op1.convert_to_code(conversion_type)}),#{predicate});"
