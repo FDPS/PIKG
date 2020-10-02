@@ -184,11 +184,26 @@ class Accumulate
         imm8 = "0xb1" if size == 32
         sh_suffix = "ps" if size == 32
         sh_suffix = "pd" if size == 64
-        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},_mm256_shuffle_#{sh_suffix}(#{src},#{src},#{imm8}));\n"
-        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},_mm256_shuffle_#{sh_suffix}(#{src},#{src},0xee));\n" if size == 32
+        lop = "#{src}"
+        lop = "_mm256_castsi256_ps(#{lop})" if type =~ /(S|U)(64|32)/
+
+        rop = lop
+        rop = "_mm256_shuffle_#{sh_suffix}(#{rop},#{rop},#{imm8})"
+        rop = "_mm256_castps_si256(#{rop})" if type =~ /(S|U)(64|32)/
+        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},#{rop});\n"
+        if size == 32
+          rop = lop
+          rop = "_mm256_shuffle_#{sh_suffix}(#{rop},#{rop},0xee)"
+          rop = "_mm256_castps_si256(#{rop})" if type =~ /(S|U)(64|32)/
+          ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},#{rop});\n"
+        end 
         ext_suffix = "ps"
         ext_suffix = "pd" if @type == "F64"
-        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},_mm256_cast#{ext_suffix}128_#{ext_suffix}256(_mm256_extractf128_#{ext_suffix}(#{src},1)));\n"
+        rop = src
+        rop = "_mm256_castsi256_ps(#{rop})" if type =~ /(S|U)(64|32)/
+        rop = "_mm256_cast#{ext_suffix}128_#{ext_suffix}256(_mm256_extractf128_#{ext_suffix}(#{rop},1))"
+        rop = "_mm256_cast#{ext_suffix}_si256(#{rop})" if  type =~ /(S|U)(64|32)/
+        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},#{rop});\n"
         dest_conv = "#{@dest.convert_to_code(conversion_type)}[0]"
         src_conv = "#{src}[0]"
         if op == "max" || op == "min"
@@ -360,7 +375,13 @@ end
               suffix = get_type_suffix_avx2(type_single)
               suffix = "ps"
               suffix = "pd" if type_single =~ /64/
-              ret += "#{dest.convert_to_code(conversion_type)} = _mm256_blend_#{suffix}(#{src.convert_to_code(conversion_type)},#{dest.convert_to_code(conversion_type)},#{imm8});\n"
+              src_tmp = src.convert_to_code(conversion_type)
+              src_tmp = "_mm256_castsi256_#{suffix}(#{src_tmp})" if type =~ /(S|U)(64|32)/
+              dst_tmp = dest.convert_to_code(conversion_type)
+              dst_tmp = "_mm256_castsi256_#{suffix}(#{dst_tmp})" if type =~ /(S|U)(64|32)/
+              tmp = "_mm256_blend_#{suffix}(#{src_tmp},#{dst_tmp},#{imm8})"
+              tmp = "_mm256_cast#{suffix}_si256(#{tmp})" if type =~ /(S|U)(64|32)/
+              ret += "#{dest.convert_to_code(conversion_type)} = #{tmp};\n"
             }
           end
         }
@@ -515,7 +536,22 @@ end
       #end
       #p ninj_set
 
+      class_size = [0,0,0]
+      iotypes = ["EPI","EPJ","FORCE"]
+      iotypes.each{ |io|
+        $varhash.each{ |v|
+          iotype = v[1][0]
+          modifier = v[1][3]
+          if iotype == io && modifier != "local"
+            type = v[1][1]
+            class_size[iotypes.index(io)] += sizeof(type) / 8
+          end
+        }
+      }
       code += kernel_class_def(conversion_type)
+      code += "static_assert(sizeof(#{$epi_name}) == #{class_size[0]});\n"
+      code += "static_assert(sizeof(#{$epj_name}) == #{class_size[1]});\n"
+      code += "static_assert(sizeof(#{$force_name}) == #{class_size[2]});\n"
       code += "if(kernel_select>=0) kernel_id = kernel_select;\n"
       code += "if(kernel_id == 0){\n"
       code += "std::cout << \"ni: \" << ni << \" nj:\" << nj << std::endl;\n"
@@ -958,34 +994,35 @@ end
     end
 
 
-    def kernel_body_multi_prec(ninj,conversion_type,istart=0,h=$varhash)
+    def kernel_body_multi_prec(ninj,conversion_type,istart=0,h=$varhash,isTail = false)
       #accum_hash = generate_accum_hash(@statements,h)
       #return kernel_body(conversion_type,istart,h) if conversion_type == "reference"
 
       code = String.new
       kernel_body = Array.new
+      if !isTail
+        code += NonSimdDecl.new(["S32","i"]).convert_to_code(conversion_type) if istart == 0
+        code += NonSimdDecl.new(["S32","j"]).convert_to_code(conversion_type)
 
-      code += NonSimdDecl.new(["S32","i"]).convert_to_code(conversion_type) if istart == 0
-      code += NonSimdDecl.new(["S32","j"]).convert_to_code(conversion_type)
-
-      # declare "local" variables
-      h.each{ |v|
-        modifier = v[1][3]
-        if modifier == "local"
-          name = v[0]
-          iotype = v[1][0]
-          type   = v[1][1]
-          array_size = ["ni","nj"][["EPI","EPJ"].index(iotype)]
-          if type =~ /vec/
-            type = type.delete("vec")
-            code += Declaration.new([type,Expression.new([:array,"#{name}_tmp_x",array_size,type])]).convert_to_code("reference")
-            code += Declaration.new([type,Expression.new([:array,"#{name}_tmp_y",array_size,type])]).convert_to_code("reference")
-            code += Declaration.new([type,Expression.new([:array,"#{name}_tmp_z",array_size,type])]).convert_to_code("reference")
-          else
-            code += Declaration.new([type,Expression.new([:array,"#{name}_tmp",array_size,type])]).convert_to_code("reference")
+        # declare "local" variables
+        h.each{ |v|
+          modifier = v[1][3]
+          if modifier == "local"
+            name = v[0]
+            iotype = v[1][0]
+            type   = v[1][1]
+            array_size = ["ni","nj"][["EPI","EPJ"].index(iotype)]
+            if type =~ /vec/
+              type = type.delete("vec")
+              code += Declaration.new([type,Expression.new([:array,"#{name}_tmp_x",array_size,type])]).convert_to_code("reference")
+              code += Declaration.new([type,Expression.new([:array,"#{name}_tmp_y",array_size,type])]).convert_to_code("reference")
+              code += Declaration.new([type,Expression.new([:array,"#{name}_tmp_z",array_size,type])]).convert_to_code("reference")
+            else
+              code += Declaration.new([type,Expression.new([:array,"#{name}_tmp",array_size,type])]).convert_to_code("reference")
+            end
           end
-        end
-      }
+        }
+      end
 
       # calc or copy local variables from EPI, EPJ, or FORCE
       ss = Array.new
@@ -1005,7 +1042,7 @@ end
           end
           new_exp = exp.replace_fdpsname_recursive(h)
           loop_tmp.statements += [Statement.new([new_name,new_exp])]
-          code += loop_tmp.convert_to_code("reference")
+          code += loop_tmp.convert_to_code("reference") if !isTail
         else
           ss.push(s)
         end
@@ -1090,7 +1127,7 @@ end
         }
         code += "{ // tail loop of reference \n"
         #code += kernel_body("reference",nil,h)
-        code += kernel_body_multi_prec([1,1],"reference",nil,h)
+        code += kernel_body_multi_prec([1,1],"reference",nil,h,true)
         code += "} // end loop of reference \n"
       end
       #abort
