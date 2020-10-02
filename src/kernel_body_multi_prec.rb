@@ -26,16 +26,18 @@ class Load
       }
 
     when "AVX2"
+      suffix = get_type_suffix_avx2(type)
+      set1_suffix = ""
+      set1_suffix = "x" if suffix == "epi64"
       case nlane
       when lane_size
         get_vector_elements(@type).each{ |dim|
-          suffix = get_type_suffix_avx2(type)
           src = @src
           src = Expression.new([:dot,src,dim,get_single_element_type(@type)]) if dim != ""
           dest = @dest
           dest = Expression.new([:dot,dest,dim,get_single_element_type(@type)]) if dim != ""
 
-          ret += "#{@dest.convert_to_code(conversion_type)} = _mm256_set1_#{suffix}(#{src.convert_to_code("reference")});\n"
+          ret += "#{@dest.convert_to_code(conversion_type)} = _mm256_set1_#{suffix}#{set1_suffix}(#{src.convert_to_code("reference")});\n"
         }
       when 1
         if @modifier == "local"
@@ -893,22 +895,27 @@ end
       ret
     end
 
-    def generate_jloop_body(ss,fvars,split_vars,conversion_type,h=$varhash)
+    def generate_jloop_body(ss,fvars,split_vars,conversion_type,h=$varhash,insideConditionalBranch = false)
       ret = Array.new
+      if !insideConditionalBranch
+        ss.each{ |s|
+          ret += s.declare_temporal_var
+        }
+      end
       ss.each{ |s|
         if conversion_type == "reference"
           if isStatement(s)
-            ret += s.declare_temporal_var 
+            #ret += s.declare_temporal_var
             ret.push(s)
           elsif s.class == ConditionalBranch
             tmp_cbb = ConditionalBranch.new([[],[]])
             tmp_cbb.conditions = s.conditions
             s.bodies.each{ |bss|
-              tmp_cbb.bodies.push(generate_jloop_body(bss,fvars,split_vars,conversion_type,h))
+              tmp_cbb.bodies.push(generate_jloop_body(bss,fvars,split_vars,conversion_type,h,true))
             }
             ret += [tmp_cbb]
           else
-            ret += s.declare_temporal_var
+            #ret += s.declare_temporal_var
             ret += [s]
           end
         else
@@ -944,7 +951,7 @@ end
                   ret += [tmp]
                   ops += [name]
                 end
-                ret += s.declare_temporal_var
+                #ret += s.declare_temporal_var
                 ret += [Statement.new([lexp,Fusion.new([ops,type_from,type_to]),type_to])]
               elsif size_to > size_from
                 # fission
@@ -956,7 +963,7 @@ end
                   tmp = Statement.new([name,Fission.new([op,type_from,type_to,i%(n_to/n_from)]),type_to])
 
                   $varhash[name] = [nil,type_to,nil] if $varhash[name] == nil
-                  ret += tmp.declare_temporal_var
+                  #ret += tmp.declare_temporal_var
                   ret += [tmp]
                 end
                 split_vars += [lexp]
@@ -986,7 +993,7 @@ end
 
               split_vars += [lexp]
             else
-              ret += s.declare_temporal_var
+              #ret += s.declare_temporal_var
               ret += [s]
             end
           elsif s.class == ConditionalBranch
@@ -1015,7 +1022,7 @@ end
             }
             ret += [tmp_cbb]
           else
-            ret += s.declare_temporal_var
+            #ret += s.declare_temporal_var
             ret += [s]
           end
         end
@@ -1026,7 +1033,7 @@ end
 
     def kernel_body_multi_prec(ninj,conversion_type,istart=0,h=$varhash)
       #accum_hash = generate_accum_hash(@statements,h)
-      return kernel_body(conversion_type,istart,h) if conversion_type == "reference"
+      #return kernel_body(conversion_type,istart,h) if conversion_type == "reference"
 
       code = String.new
       kernel_body = Array.new
@@ -1155,7 +1162,8 @@ end
           v[1][0] = nil if iotype == "declared"
         }
         code += "{ // tail loop of reference \n"
-        code += kernel_body("reference",nil,h)
+        #code += kernel_body("reference",nil,h)
+        code += kernel_body_multi_prec([1,1],"reference",nil,h)
         code += "} // end loop of reference \n"
       end
       #abort

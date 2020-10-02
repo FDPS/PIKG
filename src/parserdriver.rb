@@ -101,8 +101,7 @@ def generate_related_map(fs,ss,h=$varhash)
   ret
 end
 
-def generate_force_related_map(ss,h=$varhash)
-  fvars = []
+def generate_force_related_map(ss,h=$varhash,fvars=[])
   ss.reverse_each{ |s|
     if isStatement(s)
       name = get_name(s)
@@ -122,12 +121,13 @@ def generate_force_related_map(ss,h=$varhash)
       end
     elsif s.class == ConditionalBranch
       s.conditions.zip(s.bodies){ |c,b|
-        fvars += generate_force_related_map(b,h)
+        fvars += generate_force_related_map(b,h,fvars)
         fvars += c.get_related_variable
       }
     end
   }
-  fvars.sort.uniq
+  ret = fvars.sort.uniq
+  ret
 end
 
 class Kernelprogram
@@ -842,7 +842,6 @@ class Kernelprogram
           end
           first_loop = false
           jjloop = Loop.new(["jj","0","#{$strip_mining}",1,[]])
-
           loop_fission_vars[fission_count][1].each{ |v|
             iotype = h[v][0]
             type   = h[v][1]
