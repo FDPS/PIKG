@@ -503,7 +503,7 @@ class Kernelprogram
 
     code += "int kernel_id = 0;\n"
     code += "void operator()"
-    code += "(const #{$epi_name}* __restrict__ epi,const int ni,const #{$epj_name}* __restrict__ epj,const int nj,#{$force_name}* __restrict__ force,const int kernel_select = -1){\n"
+    code += "(const #{$epi_name}* __restrict__ epi,const int ni,const #{$epj_name}* __restrict__ epj,const int nj,#{$force_name}* __restrict__ force,const int kernel_select = 1){\n"
     code
   end
 
