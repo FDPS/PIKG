@@ -350,86 +350,95 @@ class Expression
     end
 
     retval = "_mm256"
+    set1_suffix = ""
+    set1_suffix = "x" if type == "epi64"
+    lop = @lop.convert_to_code(conversion_type)
+    rop = @rop.convert_to_code(conversion_type) if @rop != nil
+    if [:lt,:le,:gt,:ge,:eq,:neq,:land,:lor,:landnot].index(@operator) && @lop.get_type =~ /(S|U)(64|32)/
+      lop = "_mm256_castsi256_#{type}(" + lop + ")"
+      rop = "_mm256_castsi256_#{type}(" + rop + ")" if @rop != nil
+    end
     case @operator
     when :uminus then
       retval += "_sub_#{type}("
-      retval += "_mm256_set1_#{type}((PIKG::#{@type})0.0)," + @lop.convert_to_code(conversion_type) + ")"
+      retval += "_mm256_set1_#{type}#{set1_suffix}((PIKG::#{@type})0.0)," + lop + ")"
     when :plus then
       retval += "_add_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ")"
+      retval += lop + "," + rop + ")"
     when :minus then
       retval += "_sub_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ")"
+      retval += lop + "," + rop + ")"
     when :mult then
       retval += "_mul_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ")"
+      retval += lop + "," + rop + ")"
     when :div then
+      abort "division of integer value is not supported in AVX2" if @type =~ /(S|U)(32|64)/
       retval += "_div_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ")"
+      retval += lop + "," + rop + ")"
     when :lt then
       retval += "_cmp_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ",_CMP_LT_OS)"
+      retval += lop + "," + rop + ",_CMP_LT_OS)"
       retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :le then
       retval += "_cmp_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ",_CMP_LE_OS)"
+      retval += lop + "," + rop + ",_CMP_LE_OS)"
       retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :gt then
       retval += "_cmp_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ",_CMP_GT_OS)"
+      retval += lop + "," + rop + ",_CMP_GT_OS)"
       retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :ge then
       retval += "_cmp_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ",_CMP_GE_OS)"
+      retval += lop + "," + rop + ",_CMP_GE_OS)"
       retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :eq then
       retval += "_cmp_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ",_CMP_EQ_OQ)"
+      retval += lop + "," + rop + ",_CMP_EQ_OQ)"
       retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :neq then
       retval += "_cmp_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ",_CMP_NEQ_OQ)"
+      retval += lop + "," + rop + ",_CMP_NEQ_OQ)"
       retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :and then
       retval += "_and_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ")"
+      retval += lop + "," + rop + ")"
     when :or then
       retval += "_or_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ")"
+      retval += lop + "," + rop + ")"
     when :land then
       retval += "_and_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ")"
+      retval += lop + "," + rop + ")"
       retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :landnot then # PIKG assume andnot(a,b) = a & (!b), but AVX2 andnot returns (!a) & b
       retval += "_andnot_#{type}("
-      retval += @rop.convert_to_code(conversion_type) + "," + @lop.convert_to_code(conversion_type) + ")"
+      retval += rop + "," + lop + ")"
       retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :lor then
       retval += "_or_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ")"
+      retval += lop + "," + rop + ")"
       retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :not then
       retval += "_xor_#{type}("
-      retval += @lop.convert_to_code(conversion_type) + "," + "_mm256_castsi256_#{type}(_mm256_set1_epi32(-1))" + ")"
+      retval += lop + "," + "_mm256_castsi256_#{type}(_mm256_set1_epi32(-1))" + ")"
       retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :dot then
       if @rop == "x" || @rop == "y" || @rop == "z" || @rop == "w"
-        retval=@lop.convert_to_code(conversion_type)+"."
+        retval=lop+"."
         retval += ["v0","v1","v2","v3"][["x","y","z","w"].index(@rop)]
-        #@rop.convert_to_code(conversion_type)
+        #rop
       elsif @rop == "v0" || @rop == "v1" || @rop == "v2" || @rop == "v3"
-        retval=@lop.convert_to_code(conversion_type)+"." + @rop
-        #@rop.convert_to_code(conversion_type)
+        retval=lop+"." + @rop
+        #rop
       else
-        #retval = "#{@lop.convert_to_code(conversion_type)}.#{@rop.convert_to_code(conversion_type)}"
-        retval = "_mm256_set1_#{type}(#{@lop.convert_to_code(conversion_type)}.#{@rop.convert_to_code(conversion_type)})"
+        #retval = "#{lop}.#{rop}"
+        retval = "_mm256_set1_#{type}#{set1_suffix}(#{lop}.#{rop})"
       end
     when :func then
       retval = @lop
       #retval += "_mask"
-      retval += "(" + @rop.convert_to_code(conversion_type) + ")"
+      retval += "(" + rop + ")"
     when :array then
-      retval = @lop.convert_to_code(conversion_type)+"[" + @rop.convert_to_code(conversion_type) + "]"
+      retval = lop+"[" + rop + "]"
     else
       abort "error: unsupported operator #{@operator} for AVX2"
     end
@@ -472,7 +481,7 @@ class IntegerValue
   def convert_to_code_avx2(conversion_type)
     case @type
     when "S64"
-      "_mm256_set1_epi64(#{@val})"
+      "_mm256_set1_epi64x(#{@val})"
     when "S32"
       "_mm256_set1_epi32(#{@val})"
     when "S16"
