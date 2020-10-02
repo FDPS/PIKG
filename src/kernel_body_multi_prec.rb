@@ -549,9 +549,9 @@ end
         }
       }
       code += kernel_class_def(conversion_type)
-      code += "static_assert(sizeof(#{$epi_name}) == #{class_size[0]});\n"
-      code += "static_assert(sizeof(#{$epj_name}) == #{class_size[1]});\n"
-      code += "static_assert(sizeof(#{$force_name}) == #{class_size[2]});\n"
+      code += "static_assert(sizeof(#{$epi_name}) == #{class_size[0]},\"check consistency of EPI member variable definition between PIKG source and original source\");\n"
+      code += "static_assert(sizeof(#{$epj_name}) == #{class_size[1]},\"check consistency of EPJ member variable definition between PIKG source and original source\");\n"
+      code += "static_assert(sizeof(#{$force_name}) == #{class_size[2]},\"check consistency of FORCE member variable definition between PIKG source and original source\");\n"
       code += "if(kernel_select>=0) kernel_id = kernel_select;\n"
       code += "if(kernel_id == 0){\n"
       code += "std::cout << \"ni: \" << ni << \" nj:\" << nj << std::endl;\n"
