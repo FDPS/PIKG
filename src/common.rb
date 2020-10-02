@@ -107,11 +107,11 @@ end
 def sizeof(type)
   case type
   when /64/
-    "64"
+    64
   when /32/
-    "32"
+    32
   when /16/
-    "16"
+    16
   end
 end
 
