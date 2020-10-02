@@ -106,11 +106,29 @@ end
 
 def sizeof(type)
   case type
-  when /64/
+  when /F64vec(3)?/
+    64*3
+  when /F32vec(3)?/
+    32*3
+  when /F16vec(3)?/
+    16*3
+  when "F64vec2"
+    64*2
+  when "F32vec2"
+    32*2
+  when "F16vec2"
+    16*2
+  when "F64vec4"
+    64*4
+  when "F32vec4"
+    32*4
+  when "F16vec4"
+    16*4
+  when /(F|S|U|B)64/
     64
-  when /32/
+  when /(F|S|U|B)32/
     32
-  when /16/
+  when /(F|S|U|B)16/
     16
   end
 end
