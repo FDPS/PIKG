@@ -1014,11 +1014,11 @@ end
             array_size = ["ni","nj"][["EPI","EPJ"].index(iotype)]
             if type =~ /vec/
               type = type.delete("vec")
-              code += Declaration.new([type,Expression.new([:array,"#{name}_tmp_x",array_size,type])]).convert_to_code("reference")
-              code += Declaration.new([type,Expression.new([:array,"#{name}_tmp_y",array_size,type])]).convert_to_code("reference")
-              code += Declaration.new([type,Expression.new([:array,"#{name}_tmp_z",array_size,type])]).convert_to_code("reference")
+              code += Declaration.new([type,Expression.new([:array," __attribute__ ((aligned(64))) #{name}_tmp_x",array_size,type])]).convert_to_code("reference")
+              code += Declaration.new([type,Expression.new([:array," __attribute__ ((aligned(64))) #{name}_tmp_y",array_size,type])]).convert_to_code("reference")
+              code += Declaration.new([type,Expression.new([:array," __attribute__ ((aligned(64))) #{name}_tmp_z",array_size,type])]).convert_to_code("reference")
             else
-              code += Declaration.new([type,Expression.new([:array,"#{name}_tmp",array_size,type])]).convert_to_code("reference")
+              code += Declaration.new([type,Expression.new([:array," __attribute__ ((aligned(64))) #{name}_tmp",array_size,type])]).convert_to_code("reference")
             end
           end
         }
