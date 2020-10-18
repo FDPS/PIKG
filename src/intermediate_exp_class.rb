@@ -657,16 +657,17 @@ class FuncCall
   end
 
   def replace_recursive(orig,replaced)
+    ops = Array.new
     @ops.each{ |op|
       if orig.class == String
-        op = op.replace_recursive(orig,replaced)
+        ops.push(op.replace_recursive(orig,replaced))
       elsif orig.class == Expression && orig.operator == :dot
-        op = op.replace_recursive(orig.lop,replaced)
+        ops.push(op.replace_recursive(orig.lop,replaced))
       else
         abort "error: #{orig} cannot be replaced with #{replaced} in FuncCall"
       end
     }
-    self.dup
+    FuncCall.new([@name,ops,@type])
   end
 
   def replace_by_list(name_list,replaced_list)
@@ -778,6 +779,8 @@ class IfElseState
         $current_predicate = "pg#{$pg_count}"
         $varhash[$current_predicate] = [nil,type,nil,nil]
         $pg_count += 1
+        #p size
+        #p $min_element_size
         nsplit = size/$min_element_size
         nsplit = 1 if conversion_type == "reference"
         pred_ops = Array.new
@@ -1276,10 +1279,10 @@ class MADD
   end
 
   def replace_recursive(orig,replaced)
-    @aop = @aop.replace_recursive(orig,replaced)
-    @bop = @bop.replace_recursive(orig,replaced)
-    @cop = @cop.replace_recursive(orig,replaced)
-    self.dup
+    aop = @aop.replace_recursive(orig,replaced)
+    bop = @bop.replace_recursive(orig,replaced)
+    cop = @cop.replace_recursive(orig,replaced)
+    MADD.new([@operator,aop,bop,cop,@type])
   end
 
   def replace_by_list(name_list,replaced_list)
@@ -1322,6 +1325,7 @@ class MADD
       when :nmsub
         retval += "svnmsb_#{get_type_suffix_a64fx(@type)}_z("
       end
+      $current_predicate = "pg0" if $current_predicate == nil
       retval += $current_predicate + ","
       retval += @aop.convert_to_code(conversion_type) + ","
       retval += @bop.convert_to_code(conversion_type) + ","

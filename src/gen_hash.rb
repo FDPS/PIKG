@@ -292,7 +292,9 @@ class Kernelprogram
   end
 
   def append_iotag(statement,iotag,h=$varhash)
-    rexps = statement.expression.get_related_variable
+    ret = statement
+
+    rexps = ret.expression.get_related_variable
     rexps.each{ |rexp|
       type = nil
       h.each{ |v|
@@ -302,8 +304,9 @@ class Kernelprogram
           type = get_type_from_hash(v)
         end
       }
-      statement.expression.replace_recursive(rexp,iotag+"_"+rexp) if type != nil
+      ret.expression = ret.expression.replace_recursive(rexp,iotag+"_"+rexp) if type != nil
     }
+    ret
   end
   
   def generate_alias(h=$varhash)
@@ -332,14 +335,14 @@ class Kernelprogram
         s.replace_name(lexp,"FORCE_"+lexp) if type != nil
         s.expression.replace_recursive(lexp,"FORCE_"+lexp) if type != nil
 
-        append_iotag(s,"EPI",h)
-        append_iotag(s,"EPJ",h)
-        append_iotag(s,"FORCE",h)
-
+        s = append_iotag(s,"EPI",h)
+        s = append_iotag(s,"EPJ",h)
+        s = append_iotag(s,"FORCE",h)
       elsif s.class == TableDecl
         s.add_to_varhash
       end
     }
+    #p h
     #@statements.each{ |s|
     #  p s.convert_to_code("reference")
     #}
