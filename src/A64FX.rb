@@ -35,6 +35,8 @@ def get_declare_type_a64fx(type)
     decl = "svfloat64x3_t"
   when "F32vec" then 
     decl = "svfloat32x3_t"
+  when "B32" then
+    decl = "svbool_t"
   else
     abort "error: unsupported vector type of #{type} for A64FX"
     decl = "UNSUPPORTED_VECTOR_TYPE"
@@ -100,6 +102,10 @@ def get_type_suffix_a64fx(type)
     suffix = "f64"
   when /F32vec/ then
     suffix = "f32"
+  when "B32" then
+    suffix = "b32"
+  when "B64" then
+    suffix = "b64"
   else
     abort "error: unsupported scalar type of #{@type} for A64FX (get_type_suffix)"
   end
@@ -162,7 +168,7 @@ class Kernelprogram
     code +="}\n"
 
     code += "svfloat32_t sqrt(svbool_t pg,svfloat32_t op){ return svsqrt_f32_z(pg,op); }\n"
-    code += "svfloat64_t sqrt(svbool_t pg,svfloat32_t op){ return svsqrt_f64_z(pg,op); }\n"
+    code += "svfloat64_t sqrt(svbool_t pg,svfloat64_t op){ return svsqrt_f64_z(pg,op); }\n"
     # http://math-koshimizu.hatenablog.jp/entry/2017/07/28/083000
     code += "svfloat32_t inv(svbool_t pg,svfloat32_t op){\n"
     code += "svfloat32_t x1 = svrecpe_f32(op);\n"
@@ -501,33 +507,16 @@ end
 
 class Expression
   def convert_to_code_a64fx(conversion_type,predicate=$current_predicate)
+    predicate = "pg0" if $current_predicate == nil
+
     if @operator != :array && @operator != :func
-      case self.get_type
-      when "F64"
-        type = "f64"
-      when "F32"
-        type = "f32"
-      when "S64"
-        type = "s64"
-      when "S32"
-        type = "s32"
-      when "U64"
-        type = "u64"
-      when "U32"
-        type = "u32"
-      when "B64"
-        type = "b64"
-      when "B32"
-        type = "b32"
-      when "F64vec"
-        type = "f64x3"
-      when "F32vec"
-        type = "f32x3"
+      if [:eq,:neq,:gt,:ge,:lt,:le].index(@operator)
+        type = get_type_suffix_a64fx(@lop.get_type)
       else
-        #abort "error: unsupported type #{@type} and operator #{@operator}"
+        type = get_type_suffix_a64fx(self.get_type)
       end
     end
-
+    
     case @operator
     when :uminus then
       retval="svneg_#{type}_z(" + predicate + "," + @lop.convert_to_code(conversion_type) + ")"

@@ -27,17 +27,36 @@ class Loop
     ret += "for("
     ret += "#{@index} = #{@loop_beg}" if @loop_beg  != nil
     ret += ";"
-    ret += "#{@index} < #{@loop_end};"
+    case conversion_type
+    when "reference"
+      ret += "#{@index} < #{@loop_end};"
+    when /AVX/
+      ret += "#{@index} < (#{@loop_end}/#{@interval})*#{@interval};"
+    when "A64FX"
+      ret += "#{@index} < ((#{@loop_end} + #{@interval} - 1)/#{@interval})*#{@interval};"
+    end
     if @interval == 1
       ret += "++#{@index}"
     else
       ret += "#{@index} += #{@interval}"
     end
     ret += "){\n"
+    if conversion_type == "A64FX"
+      if @interval != 1
+        $current_predicate = "pg#{$pg_count}"
+        ret += "svbool_t #{$current_predicate} = svwhilelt_b#{$min_element_size}_s#{$min_element_size}(#{@index},#{@loop_end});\n"
+        $pg_count += 1
+      end
+    end
     statements.each{|s|
       ret += s.convert_to_code(conversion_type) + "\n"
     }
     ret += "} // loop of #{@index}\n"
+    if conversion_type == "A64FX"
+      if @interval != "1"
+        $pg_count -= 1
+      end
+    end
     ret
   end
 end
@@ -759,6 +778,7 @@ class IfElseState
     when /(A64FX|AVX2|AVX-512)/
       if $predicate_queue == nil
         $predicate_queue = Array.new()
+        $predicate_queue.push($current_predicate)
       end
       if $nest_queue == nil
         $nest_queue = Array.new()
@@ -776,8 +796,8 @@ class IfElseState
         $accumulate_predicate = "pg#{$pg_count}"
         $varhash[$accumulate_predicate] = [nil,type,nil,nil]
         $pg_count += 1
-        $current_predicate = "pg#{$pg_count}"
-        $varhash[$current_predicate] = [nil,type,nil,nil]
+        tmp_predicate = "pg#{$pg_count}"
+        $varhash[tmp_predicate] = [nil,type,nil,nil]
         $pg_count += 1
         #p size
         #p $min_element_size
@@ -789,30 +809,33 @@ class IfElseState
           exp = @expression
           suffix = String.new
           suffix = "_#{i}" if nsplit > 1
-          ret += Declaration.new([type,$current_predicate+suffix]).convert_to_code(conversion_type)
+          ret += Declaration.new([type,tmp_predicate+suffix]).convert_to_code(conversion_type)
           ret += Declaration.new([type,$accumulate_predicate+suffix]).convert_to_code(conversion_type)
           exp.get_related_variable.each{ |v|
             exp = exp.replace_recursive(v,v+suffix)
           }
-          ret += Statement.new([$current_predicate+suffix,exp,type]).convert_to_code(conversion_type) + "\n"
-          ret += Statement.new([$accumulate_predicate+suffix,$current_predicate+suffix,type,nil]).convert_to_code(conversion_type) + "\n"
-          pred_ops.push($current_predicate + suffix)
+          ret += Statement.new([tmp_predicate+suffix,exp,type]).convert_to_code(conversion_type) + "\n"
+          ret += Statement.new([$accumulate_predicate+suffix,tmp_predicate+suffix,type,nil]).convert_to_code(conversion_type) + "\n"
+          pred_ops.push(tmp_predicate + suffix)
           accum_ops.push($accumulate_predicate + suffix)
         end
         if nsplit > 1
-          ret += Declaration.new([type,$current_predicate]).convert_to_code(conversion_type)
+          ret += Declaration.new([type,tmp_predicate]).convert_to_code(conversion_type)
           ret += Declaration.new([type,$accumulate_predicate]).convert_to_code(conversion_type)
-          ret += Statement.new([$current_predicate,Fusion.new([pred_ops,type,"B#{$min_element_size}"])]).convert_to_code(conversion_type) + "\n" if
+          ret += Statement.new([tmp_predicate,Fusion.new([pred_ops,type,"B#{$min_element_size}"])]).convert_to_code(conversion_type) + "\n" if
           ret += Statement.new([$accumulate_predicate,Fusion.new([accum_ops,type,"B#{$min_element_size}"])]).convert_to_code(conversion_type) + "\n"
         end
         if $nest_queue.empty?
         else
-          $nest_queue.each{ |predicate|
-            ret += Statement.new([$current_predicate,Expression.new([:land,$current_predicate,predicate,type]),type,nil]).convert_to_code(conversion_type) + "\n"
-          }
+          if conversion_type =~ /AVX/
+            $nest_queue.each{ |predicate|
+              ret += Statement.new([tmp_predicate,Expression.new([:land,tmp_predicate,predicate,type]),type,nil]).convert_to_code(conversion_type) + "\n"
+            }
+          end
         end
-        $predicate_queue.push($current_predicate)
-        $nest_queue.push($current_predicate)
+        $predicate_queue.push(tmp_predicate)
+        $nest_queue.push(tmp_predicate)
+        $current_predicate = tmp_predicate
       when :elsif
         $nest_queue.pop
         tmp_predicate = $predicate_queue.pop
@@ -862,6 +885,7 @@ class IfElseState
         $nest_queue.pop
         abort "pg_count < 0" if $pg_count < 0
         $current_predicate = $predicate_queue.pop #"pg#{$pg_count}"
+        $current_predicate = "pg0" if $current_predicate == nil
         ret += "}\n"
       else
         abort "undefined operator of IfElseState: #{@operator}"

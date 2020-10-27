@@ -1684,8 +1684,8 @@ else
   case $conversion_type
   when "CUDA"
     program.generate_optimized_cuda_kernel($conversion_type)
-  when "A64FX"
-    program.generate_optimized_code($conversion_type)
+#  when "A64FX"
+#    program.generate_optimized_code($conversion_type)
   else
     program.generate_optimized_code_multi_prec($conversion_type)
   end
