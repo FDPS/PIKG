@@ -639,13 +639,13 @@ class Kernelprogram
     }
   end
 
-  def generate_loop_begin_multi_prec(conversion_type,lane_size,ij,start = nil)
+  def generate_loop_begin_multi_prec(conversion_type,lane_size,ij,opt=nil,start = nil)
     n = "n"+ij
     ret = nil;
     if conversion_type == "reference"
-      ret = Loop.new([ij,start,n,1,[]])
+      ret = Loop.new([ij,start,n,1,[],opt])
     else
-      ret = Loop.new([ij,start,n,lane_size,[]])
+      ret = Loop.new([ij,start,n,lane_size,[],opt])
     end
     ret
   end
@@ -998,6 +998,8 @@ class Kernelprogram
     #return kernel_body(conversion_type,istart,h) if conversion_type == "reference"
     code = String.new
 
+    $current_predicate = "svptrue_b#{$min_element_size}()" if conversion_type == "A64FX"
+
     kernel_body = Array.new
     if !isTail
       code += NonSimdDecl.new(["S32","i"]).convert_to_code(conversion_type) if istart == 0
@@ -1079,7 +1081,14 @@ class Kernelprogram
 
     #p "split_vars:"
     #p split_vars
-    iloop = generate_loop_begin_multi_prec(conversion_type,ninj[0]*$max_element_size/$min_element_size,"i",istart)
+    opt = nil
+    case conversion_type
+    when /A64FX/
+      opt = :up
+    when /AVX/
+      opt = :down
+    end
+    iloop = generate_loop_begin_multi_prec(conversion_type,ninj[0]*$max_element_size/$min_element_size,"i",opt,istart)
     #iloop.statements += load_ivars(conversion_type,lane_size,lane_size/ninj[0],fvars)
 
     # load EPI and FORCE variable
@@ -1087,11 +1096,109 @@ class Kernelprogram
     #iloop.statements += load_vars("FORCE",fvars,ninj[0],conversion_type)
     iloop.statements += init_force(fvars,$accumhash,conversion_type)
 
-    jloop = generate_loop_begin_multi_prec(conversion_type,ninj[1],"j",0)
+    if $strip_mining != nil
+      interval = $strip_mining * ninj[1]
+      jloop = generate_loop_begin_multi_prec(conversion_type,"#{interval}","j",:down,0)
+      
+      nsimd = ninj[0]*$max_element_size/$min_element_size
+
+      jloop.statements.push(NonSimdDecl.new(["S32","jj"]))
+      jloop.statements.push(NonSimdDecl.new(["S32","njj"]))
+      jloop.statements.push(NonSimdState.new(["njj","#{$strip_mining}"]))
+      
+      bodies = fission_loop_body(ss)
+      load_store_vars = find_loop_fission_load_store_vars(ss)
+
+      tmpvars = []
+      load_store_vars.each{ |vs|
+        vs[0].each{ |v|
+          tmpvars += [v]
+        }
+      }
+      tmpvars.uniq.each{ |v|
+        iotype = $varhash[v][0]
+        type = $varhash[v][1]
+        if type =~ /vec/
+          type = type.delete("vec")
+          jloop.statements += [NonSimdDecl.new([type,"#{v}_tmp_x[#{nsimd}*#{$strip_mining}]"])]
+          jloop.statements += [NonSimdDecl.new([type,"#{v}_tmp_y[#{nsimd}*#{$strip_mining}]"])]
+          jloop.statements += [NonSimdDecl.new([type,"#{v}_tmp_z[#{nsimd}*#{$strip_mining}]"])]
+        else
+          jloop.statements += [NonSimdDecl.new([type,"#{v}_tmp[#{nsimd}*#{$strip_mining}]"])]
+        end
+      }
+
+      jjloops = Array.new
+      bodies.zip(load_store_vars){ |b,lsv|
+        jjloop = generate_loop_begin_multi_prec(conversion_type,ninj[1],"jj",nil,0)
+        jjloop.statements.push(NonSimdDecl.new(["S32","jjj"]))
+        jjj = NonSimdExp.new([:plus,"j","jj"])
+        jjloop.statements.push(NonSimdState.new(["jjj",jjj,"S32"]))
+        lsv[1].each{ |v|
+          iotype = h[v][0]
+          type   = h[v][1]
+          if iotype == "declared"
+            jjloop.statements.push(Declaration.new([type,v]))
+            if type =~ /vec/
+              jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","x"]),PointerOf.new([type,Expression.new([:array,"#{v}_tmp_x",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),type])]
+              jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","y"]),PointerOf.new([type,Expression.new([:array,"#{v}_tmp_y",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),type])]
+              jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","z"]),PointerOf.new([type,Expression.new([:array,"#{v}_tmp_z",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),type])]
+            else
+              jjloop.statements += [LoadState.new(["#{v}",PointerOf.new([type,Expression.new([:array,"#{v}_tmp",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),type])]
+            end
+          elsif iotype == "EPJ"
+            name     = v
+            fdpsname = h[v][2]
+            modifier = h[v][3]
+
+            jjloop.statements += [Declaration.new([type,name])]
+            case modifier
+            when "local"
+              if type =~ /vec/
+                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"x"]),Expression.new([:array,"#{name}_tmp_x","jjj",type]),type])]
+                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"y"]),Expression.new([:array,"#{name}_tmp_y","jjj",type]),type])]
+                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"z"]),Expression.new([:array,"#{name}_tmp_z","jjj",type]),type])] 
+              else
+                jjloop.statements += [Duplicate.new([name,Expression.new([:array,"#{name}_tmp","jjj",type]),type])]
+              end
+            else
+              if type =~ /vec/
+                stype = type.delete("vec")
+                jjloop.statements += [Statement.new([Expression.new([:dot,name,"x"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),"jjj"]),fdpsname,type]),"x"]),stype])]
+                jjloop.statements += [Statement.new([Expression.new([:dot,name,"y"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),"jjj"]),fdpsname,type]),"y"]),stype])]
+                jjloop.statements += [Statement.new([Expression.new([:dot,name,"z"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),"jjj"]),fdpsname,type]),"z"]),stype])]
+              else
+                jjloop.statements += [Statement.new([name,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),"jjj"]),fdpsname,type]),type])]
+              end
+            end
+          end
+        }
+        jjloop.statements += generate_jloop_body(b,fvars,split_vars,conversion_type)
+        lsv[0].each{ |v|
+          type = h[v][1]
+          if type =~ /vec/
+            jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp_x",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","x"]),type])]
+            jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp_y",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","y"]),type])]
+            jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp_z",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","z"]),type])]
+          else
+            jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),"#{v}",type])]
+          end
+        }
+        jloop.statements.push(jjloop)
+      }
+      iloop.statements += [jloop]
+      jloop = generate_loop_begin_multi_prec(conversion_type,ninj[1],"j",nil)
+      $varhash.each{ |h|
+        h[1][0] = nil if h[1][0] == "declared"
+      }
+    else
+      jloop = generate_loop_begin_multi_prec(conversion_type,ninj[1],"j",opt,0)
+    end # strip_mining
     jloop.statements += load_jvars(fvars,ninj[1],conversion_type)
     jloop.statements += generate_jloop_body(ss,fvars,split_vars,conversion_type)
 
-    iloop.statements += [jloop]
+    iloop.statements += [jloop]    
+
     if ninj[1] > 1 && conversion_type != "A64FX"
       h.each{ |v|
         iotype = get_iotype_from_hash(v)
@@ -1105,7 +1212,7 @@ class Kernelprogram
           tmpvar.push([v,type])
         end
       }
-      jloop_tail = generate_loop_begin_multi_prec(conversion_type,1,"j",nil)
+      jloop_tail = generate_loop_begin_multi_prec(conversion_type,1,"j",nil,nil)
       jloop_tail.statements += load_jvars(fvars,1,conversion_type)
       jloop_tail.statements += generate_jloop_body(ss,fvars,split_vars,conversion_type,nil)
       jloop_tail = TailJLoop.new([jloop_tail,ninj,tmpvar])

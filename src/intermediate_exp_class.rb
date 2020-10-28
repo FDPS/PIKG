@@ -18,22 +18,22 @@ class Kernelprogram
 end
 
 class Loop
-  attr_accessor :index,:loop_beg,:loop_end,:interval,:statements
+  attr_accessor :index,:loop_beg,:loop_end,:interval,:statements,:option
   def initialize(x)
-    @index,@loop_beg,@loop_end,@interval,@statements = x
+    @index,@loop_beg,@loop_end,@interval,@statements,@option = x
   end
   def convert_to_code(conversion_type="reference")
     ret = ""
     ret += "for("
     ret += "#{@index} = #{@loop_beg}" if @loop_beg  != nil
     ret += ";"
-    case conversion_type
-    when "reference"
-      ret += "#{@index} < #{@loop_end};"
-    when /AVX/
+    case @option
+    when :down
       ret += "#{@index} < (#{@loop_end}/#{@interval})*#{@interval};"
-    when "A64FX"
+    when :up
       ret += "#{@index} < ((#{@loop_end} + #{@interval} - 1)/#{@interval})*#{@interval};"
+    else
+      ret += "#{@index} < #{@loop_end};"
     end
     if @interval == 1
       ret += "++#{@index}"
@@ -41,10 +41,18 @@ class Loop
       ret += "#{@index} += #{@interval}"
     end
     ret += "){\n"
+
+    predicate = nil
+    count = $pg_count
     if conversion_type == "A64FX"
       if @interval != 1
+        predicate = $current_predicate
         $current_predicate = "pg#{$pg_count}"
-        ret += "svbool_t #{$current_predicate} = svwhilelt_b#{$min_element_size}_s#{$min_element_size}(#{@index},#{@loop_end});\n"
+        if predicate =~ /svptrue_b/
+          ret += "svbool_t #{$current_predicate} = svwhilelt_b#{$min_element_size}_s#{$min_element_size}(#{@index},#{@loop_end});\n"
+        else
+          ret += "svbool_t #{$current_predicate} = svand_b_z(svptrue_b#{$min_element_size}(),svwhilelt_b#{$min_element_size}_s#{$min_element_size}(#{@index},#{@loop_end}),#{predicate});\n"
+        end
         $pg_count += 1
       end
     end
@@ -54,9 +62,11 @@ class Loop
     ret += "} // loop of #{@index}\n"
     if conversion_type == "A64FX"
       if @interval != "1"
-        $pg_count -= 1
+        $current_predicate = predicate
+        $current_predicate = "pg0" if $current_predicate == nil
       end
     end
+    $pg_count = count
     ret
   end
 end
@@ -735,12 +745,23 @@ class Pragma
     []
   end
 
+  def declare_temporal_var
+    []
+  end
+
   def convert_to_code(conversion_type="reference")
-    ret = "#pragma #{@name}"
-    if @option != nil then
-      @option.each{ |x|
-        ret += " #{x}"
-      }
+    ret = String.new
+    case @name
+    when "unroll"
+      $unroll_stage = @option[0].to_i
+      warn "unroll_stage is changed to #{$unroll_stage}"
+    else
+      ret = "#pragma #{@name}"
+      if @option != nil then
+        @option.each{ |x|
+          ret += " #{x}"
+        }
+      end
     end
     ret
   end
@@ -778,7 +799,6 @@ class IfElseState
     when /(A64FX|AVX2|AVX-512)/
       if $predicate_queue == nil
         $predicate_queue = Array.new()
-        $predicate_queue.push($current_predicate)
       end
       if $nest_queue == nil
         $nest_queue = Array.new()
