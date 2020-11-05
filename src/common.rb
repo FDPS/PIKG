@@ -179,7 +179,7 @@ def get_name(x)
     else
       abort "get_name for not :dot epxpression"
     end
-  elsif x.class ==  Statement
+  elsif x.class ==  Statement || x.class == NonSimdState
     if x.name.class == Expression
       ret = get_name(x.name)
     else
@@ -475,6 +475,7 @@ def count_class_member(io,h=$varhash)
     type   = v[1][1]
     modifier = v[1][3]
     if iotype == io && modifier == nil
+      next if v[0] =~ /_swpl/
       prev_type = type.delete("vec") if tot == 0
       byte = byte_count(type)
       tot += byte_count(type) if modifier == nil
