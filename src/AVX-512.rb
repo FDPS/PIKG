@@ -160,7 +160,7 @@ class Expression
   def convert_to_code_avx512(conversion_type)
     if @operator != :array && @operator != :func
       if [:eq,:neq,:gt,:ge,:lt,:le].index(@operator)
-      suffix = get_type_suffix_avx512(@lop.get_type)
+        suffix = get_type_suffix_avx512(@lop.get_type)
       else
         suffix = get_type_suffix_avx512(self.get_type)
       end
