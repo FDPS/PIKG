@@ -507,7 +507,7 @@ end
 
 class Expression
   def convert_to_code_a64fx(conversion_type,predicate=$current_predicate)
-    predicate = "pg0" if $current_predicate == nil
+    predicate = "svptrue_b#{$min_element_size}()" if $current_predicate == nil
 
     if @operator != :array && @operator != :func
       if [:eq,:neq,:gt,:ge,:lt,:le].index(@operator)
