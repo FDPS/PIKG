@@ -31,7 +31,7 @@ def accumulate_related_variable(orig,vars,h)
     vars.each{ |v|
       if  h[v] != nil
         if !($varhash[v][0] =~ /(EPI|EPJ|FORCE)/)
-          ret += accumulate_related_variable(v,h[v][0],h) if v != orig && h[v][1] == true
+          ret += accumulate_related_variable(v,h[v][0],h) if (v != orig && h[v][1] == true)
         end
         h[v][1] = false
       end
@@ -88,14 +88,24 @@ def generate_related_map(fs,ss,h=$varhash)
       tmp2[v[0]][0] += v[1]
     end
   }
+
   tmp3 = []
   fs.each{ |f|
     tmp3 += accumulate_related_variable(f,tmp2[f][0],tmp2)
   }
+  tmp3 +=  accumulate_related_variable("",tmp2[""][0],tmp2) if tmp2[""] != nil
+
   ss.each{ |s|
     tmp3 += s.expression.get_related_variable if s.class == IfElseState && s.expression != nil
-    tmp3 += s.get_cond_related_variable if s.class == ConditionalBranch
+    if s.class == ConditionalBranch
+      c = s.get_cond_related_variable
+      tmp3 += c
+      c.each{ |v|
+        #tmp3 += tmp2[v][0] if tmp2[v] != nil
+      }
+    end
   }
+
   ret = tmp3.sort.uniq
 
   ret
@@ -1544,7 +1554,7 @@ while true
     $conversion_type = ARGV.shift
     warn "conversion type: #{$conversion_type}\n"
   when "--strip-mining"
-    $strip_mining = ARGV.shift
+    $strip_mining = ARGV.shift.to_i
     warn "strip mining size: #{$strip_mining}\n"
   when "--software-pipelining"
     $swpl_stage = ARGV.shift.to_i

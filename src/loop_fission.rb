@@ -37,11 +37,19 @@ end
 def fission_loop_body(ss)
   bodies = Array.new
   body = Array.new
+  pragmas = Array.new
+  pragma = Array.new
 
   ss.each{ |s|
     if s.class == Pragma
-      bodies.push(body) if s.name == "statement" && s.option == ["loop_fission_point"] 
-      body = Array.new
+      if s.name == "statement" && s.option == ["loop_fission_point"] 
+        bodies.push(body)
+        pragmas.push(pragma)
+        body = Array.new
+        pragma = Array.new
+      else
+        pragma.push(s)
+      end
     end
     if s.class ==  Statement
       body.push(s)
@@ -52,8 +60,9 @@ def fission_loop_body(ss)
     end
   }
   bodies.push(body) if body != []
+  pragmas.push(pragma) if pragma != []
 
-  bodies
+  return bodies,pragmas
 end
 
 def find_loop_fission_load_store_vars(ss)

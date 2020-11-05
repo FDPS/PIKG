@@ -45,7 +45,7 @@ class Loop
     predicate = nil
     count = $pg_count
     if conversion_type == "A64FX"
-      if @interval != 1
+      if @interval != 1 && @option == :up
         predicate = $current_predicate
         $current_predicate = "pg#{$pg_count}"
         if predicate =~ /svptrue_b/
@@ -61,9 +61,9 @@ class Loop
     }
     ret += "} // loop of #{@index}\n"
     if conversion_type == "A64FX"
-      if @interval != "1"
+      if @interval != "1" && @option == :up
         $current_predicate = predicate
-        $current_predicate = "pg0" if $current_predicate == nil
+        $current_predicate = "svptrue_b#{$min_element_size}()" if $current_predicate == nil
       end
     end
     $pg_count = count
@@ -120,7 +120,8 @@ class ConditionalBranch
       b.each{|s|
         if isStatement(s)
           exp = s.expression.get_related_variable
-          exp = [get_name(s)] if exp == []
+          #exp = [get_name(s)] if exp == []
+          exp += [get_name(s)]
           ret.push([get_name(s),exp]) if exp != []
         elsif s.class == ConditionalBranch
           ret += s.get_related_variable
@@ -751,11 +752,7 @@ class Pragma
 
   def convert_to_code(conversion_type="reference")
     ret = String.new
-    case @name
-    when "unroll"
-      $unroll_stage = @option[0].to_i
-      warn "unroll_stage is changed to #{$unroll_stage}"
-    else
+    if conversion_type != "reference"
       ret = "#pragma #{@name}"
       if @option != nil then
         @option.each{ |x|
@@ -905,7 +902,7 @@ class IfElseState
         $nest_queue.pop
         abort "pg_count < 0" if $pg_count < 0
         $current_predicate = $predicate_queue.pop #"pg#{$pg_count}"
-        $current_predicate = "pg0" if $current_predicate == nil
+        $current_predicate = "svptrue_b#{$min_element_size}()" if $current_predicate == nil
         ret += "}\n"
       else
         abort "undefined operator of IfElseState: #{@operator}"
@@ -1369,7 +1366,7 @@ class MADD
       when :nmsub
         retval += "svnmsb_#{get_type_suffix_a64fx(@type)}_z("
       end
-      $current_predicate = "pg0" if $current_predicate == nil
+      $current_predicate = "svptrue_b#{$min_element_size}()" if $current_predicate == nil
       retval += $current_predicate + ","
       retval += @aop.convert_to_code(conversion_type) + ","
       retval += @bop.convert_to_code(conversion_type) + ","

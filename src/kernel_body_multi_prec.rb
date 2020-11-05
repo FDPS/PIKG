@@ -485,7 +485,7 @@ class Kernelprogram
     case conversion_type
     when /A64FX/
       code += "#include <arm_sve.h>\n"
-      $current_predcate = "pg0"
+      #$current_predcate = "svptrue_b32()"
     when /AVX2/
       code += "#include <pikg_avx2.hpp>\n"
     when /AVX-512/
@@ -539,16 +539,25 @@ class Kernelprogram
 
     class_size = [0,0,0]
     iotypes = ["EPI","EPJ","FORCE"]
+    max_member_size = [2,2,2]
     iotypes.each{ |io|
       $varhash.each{ |v|
         iotype = v[1][0]
         modifier = v[1][3]
         if iotype == io && modifier != "local"
           type = v[1][1]
-          class_size[iotypes.index(io)] += sizeof(type) / 8
+          index = iotypes.index(io)
+          size = sizeof(type) / 8
+          class_size[index] += size
+          size = get_single_data_size(type) / 8
+          max_member_size[index] = size if max_member_size[index] < size
         end
       }
     }
+    class_size[0] = ((class_size[0] + max_member_size[0] - 1) / max_member_size[0]) * max_member_size[0]
+    class_size[1] = ((class_size[1] + max_member_size[1] - 1) / max_member_size[1]) * max_member_size[1]
+    class_size[2] = ((class_size[2] + max_member_size[2] - 1) / max_member_size[2]) * max_member_size[2]
+    
     code += kernel_class_def(conversion_type)
     code += "static_assert(sizeof(#{$epi_name}) == #{class_size[0]},\"check consistency of EPI member variable definition between PIKG source and original source\");\n"
     code += "static_assert(sizeof(#{$epj_name}) == #{class_size[1]},\"check consistency of EPJ member variable definition between PIKG source and original source\");\n"
@@ -860,6 +869,8 @@ class Kernelprogram
       }
     end
     ss.each{ |s|
+      #$unroll_stage = s.option[0].to_i if s.class == Pragma && s.name == "unroll"
+      next if s.class == Pragma
       if conversion_type == "reference"
         if isStatement(s)
           #ret += s.declare_temporal_var
@@ -1106,7 +1117,7 @@ class Kernelprogram
       jloop.statements.push(NonSimdDecl.new(["S32","njj"]))
       jloop.statements.push(NonSimdState.new(["njj","#{$strip_mining}"]))
       
-      bodies = fission_loop_body(ss)
+      bodies,pragmas = fission_loop_body(ss)
       load_store_vars = find_loop_fission_load_store_vars(ss)
 
       tmpvars = []
@@ -1129,11 +1140,9 @@ class Kernelprogram
       }
 
       jjloops = Array.new
-      bodies.zip(load_store_vars){ |b,lsv|
+      bodies.zip(load_store_vars,pragmas){ |b,lsv,ps|
         jjloop = generate_loop_begin_multi_prec(conversion_type,ninj[1],"jj",nil,0)
-        jjloop.statements.push(NonSimdDecl.new(["S32","jjj"]))
         jjj = NonSimdExp.new([:plus,"j","jj"])
-        jjloop.statements.push(NonSimdState.new(["jjj",jjj,"S32"]))
         lsv[1].each{ |v|
           iotype = h[v][0]
           type   = h[v][1]
@@ -1155,20 +1164,20 @@ class Kernelprogram
             case modifier
             when "local"
               if type =~ /vec/
-                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"x"]),Expression.new([:array,"#{name}_tmp_x","jjj",type]),type])]
-                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"y"]),Expression.new([:array,"#{name}_tmp_y","jjj",type]),type])]
-                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"z"]),Expression.new([:array,"#{name}_tmp_z","jjj",type]),type])] 
+                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"x"]),Expression.new([:array,"#{name}_tmp_x",jjj,type]),type])]
+                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"y"]),Expression.new([:array,"#{name}_tmp_y",jjj,type]),type])]
+                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"z"]),Expression.new([:array,"#{name}_tmp_z",jjj,type]),type])] 
               else
-                jjloop.statements += [Duplicate.new([name,Expression.new([:array,"#{name}_tmp","jjj",type]),type])]
+                jjloop.statements += [Duplicate.new([name,Expression.new([:array,"#{name}_tmp",jjj,type]),type])]
               end
             else
               if type =~ /vec/
                 stype = type.delete("vec")
-                jjloop.statements += [Statement.new([Expression.new([:dot,name,"x"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),"jjj"]),fdpsname,type]),"x"]),stype])]
-                jjloop.statements += [Statement.new([Expression.new([:dot,name,"y"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),"jjj"]),fdpsname,type]),"y"]),stype])]
-                jjloop.statements += [Statement.new([Expression.new([:dot,name,"z"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),"jjj"]),fdpsname,type]),"z"]),stype])]
+                jjloop.statements += [Statement.new([Expression.new([:dot,name,"x"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"x"]),stype])]
+                jjloop.statements += [Statement.new([Expression.new([:dot,name,"y"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"y"]),stype])]
+                jjloop.statements += [Statement.new([Expression.new([:dot,name,"z"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"z"]),stype])]
               else
-                jjloop.statements += [Statement.new([name,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),"jjj"]),fdpsname,type]),type])]
+                jjloop.statements += [Statement.new([name,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),type])]
               end
             end
           end
@@ -1184,6 +1193,13 @@ class Kernelprogram
             jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),"#{v}",type])]
           end
         }
+        ps.each{ |p|
+          if p.name == "unroll"
+            $unroll_stage = p.option[0].to_i
+            abort "unroll stage must be multiple of strip mining size" if $strip_mining % $unroll_stage != 0
+          end
+        } if ps != nil
+        jjloop = loop_unroll(jjloop,$accumhash,$unroll_stage) if $unroll_stage > 1
         jloop.statements.push(jjloop)
       }
       iloop.statements += [jloop]
