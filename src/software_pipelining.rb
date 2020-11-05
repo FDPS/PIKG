@@ -436,7 +436,7 @@ def loop_unroll(orig,accum_hash,nstage = $swpl_stage)
           name = v
           name = Expression.new([:dot,name,dim,type_single]) if type =~ /vec/
           if op == "max" || op == "min"
-            ret.body += [Statement.new([name,FuncCall(op,[name,src])])]
+            ret.body += [Statement.new([name,FuncCall.new([op,[name,src],type_single])])]
           elsif op == :plus || op == :minus
             ret.body += [Statement.new([name,Expression.new([:plus,name,src,type_single]),type_single])]
           elsif op == :mult || :div
