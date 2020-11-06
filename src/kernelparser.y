@@ -18,6 +18,7 @@ class KernelParser
 
   innerkernel: iodeclarations functions statements {result=Kernelprogram.new(val)}
              | iodeclarations statements           {result=Kernelprogram.new(val)}
+             | functions statements                {result=Kernelprogram.new(val)}
              | statements                          {result=Kernelprogram.new(val)}
   iodeclarations: iodeclaration
                 | iodeclarations iodeclaration {result = val[0]+val[1]}
