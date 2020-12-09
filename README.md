@@ -1,4 +1,4 @@
-# PIKG ver 0.1d
+# PIKG ver 0.2
 本プロジェクトは，FDPS( https://github.com/FDPS/FDPS )およびその他の粒子系シミュレータの粒子間相互作用カーネル関数の自動ジェネレータである.
 粒子間相互作用をDSLで記述し，パラメータを指定すると，任意のアーキテクチャ(Intel CPU, Fujitsu A64FX, NVIDIA GPU, PEZY-SC2, etc.)向けのカーネルを生成する．
 開発チームではぱいくじーもしくはぱいくと読んでいます．
@@ -55,6 +55,7 @@ output_fileにC++のヘッダーファイルができるので相互作用計算
 - AVX2
 - AVX-512
 - ARM SVE
+- CUDA
 
 # 参考性能
 N体計算カーネルのシングルスレッド性能をアセンブラレベルでチューニングされている(AVX2のみ)ライブラリPhantom-GRAPE( https://bitbucket.org/kohji/phantom-grape/src/master/ )との比較として置いておく．
@@ -70,5 +71,4 @@ ARM SVEに関しては，A64FX向けに専用の最適化オプションやプ�
 
 # TODO
 - 混合精度対応
-- GPUカーネル生成機能を追加
 - ドキュメントを英語に一本化
