@@ -13,19 +13,16 @@ SRC=nbody.cpp
 ifeq ($(use_avx2),yes)
 CONVERSION_TYPE=AVX2
 CCFLAGS += -mavx2 -mfma -ffast-math
-SRC+= kernel.hpp
 endif
 
 ifeq ($(use_avx512),yes)
 CONVERSION_TYPE=AVX-512
 CCFLAGS += -mavx512f -mavx512dq -ffast-math
-SRC+= kernel.hpp
 endif
 
 ifeq ($(use_arm_sve),yes)
 CONVERSION_TYPE=A64FX
 CCFLAGS += -Kfast
-SRC+= kernel.hpp
 endif
 
 ifeq ($(use_cuda),yes)
@@ -35,10 +32,6 @@ CC=nvcc
 NVCC=nvcc
 CCFLAGS+= -DUSE_CUDA_KERNEL
 NVCCFLAGS= $(CCFLAGS)
-endif
-
-ifeq ($(CONVERSION_TYPE),reference)
-SRC+= kernel.hpp
 endif
 
 all:	nbody.out
