@@ -128,8 +128,8 @@ class Kernelprogram
           fdpsname = h[v][2]
           modifier = h[v][3]
           replaced = ["epi","epj","force"][index] + "." + fdpsname
-          name = s.name.replace_recursive(v,replaced)
-          exp  = s.expression.replace_recursive(v,replaced)
+          name = tmp_s.name.replace_recursive(v,replaced)
+          exp  = tmp_s.expression.replace_recursive(v,replaced)
           tmp_s = Statement.new([name,exp,s.type,s.op])
         end
       }
