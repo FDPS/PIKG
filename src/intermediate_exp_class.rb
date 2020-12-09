@@ -1672,7 +1672,7 @@ class Expression
 
   def replace_recursive(orig,replaced)
     lop = @lop.dup
-    rop = @rop.dup
+    rop = @rop.dup if @rop != nil
     type = @type.dup
     if @operator == :dot
       if orig.class == Expression && orig.operator == :dot

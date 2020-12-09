@@ -37,6 +37,8 @@ def get_declare_type_a64fx(type)
     decl = "svfloat32x3_t"
   when "B32" then
     decl = "svbool_t"
+  when "B64" then
+    decl = "svbool_t"
   else
     abort "error: unsupported vector type of #{type} for A64FX"
     decl = "UNSUPPORTED_VECTOR_TYPE"
