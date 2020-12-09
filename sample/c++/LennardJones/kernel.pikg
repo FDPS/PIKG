@@ -1,37 +1,37 @@
-F32 l
-F32 rc
+F64 l
+F64 rc
 
-dx  = to_f32(EPI.rx - EPJ.rx)
-if dx < -0.5f*l
+dx  = EPI.rx - EPJ.rx
+if dx < -0.5*l
   dx = dx + l
 endif
-if dx >= 0.5f*l
+if dx >= 0.5*l
   dx = dx - l
 endif
 
-dy = to_f32(EPI.ry - EPJ.ry)
-if dy < -0.5f*l
+dy = EPI.ry - EPJ.ry
+if dy < -0.5*l
   dy = dy + l
 endif
-if dy >= 0.5f*l
+if dy >= 0.5*l
   dy = dy - l
 endif
 
-dz  = to_f32(EPI.rz - EPJ.rz)
-if dz < -0.5f*l
+dz  = EPI.rz - EPJ.rz
+if dz < -0.5*l
   dz = dz + l
 endif
-if dz >= 0.5f*l
+if dz >= 0.5*l
   dz = dz - l
 endif
 
 r2  = dx * dx + dy * dy + dz * dz
-if r2 < rc*rc && r2 > 0.0f
- r2i = 1.0f / r2
+if r2 < rc*rc && r2 > 0.0
+ r2i = 1.0 / r2
  r6i = r2i * r2i * r2i
- f = (48.0f * r6i - 24.0f) * r6i * r2i
- FORCE.fx += to_f64(f * dx)
- FORCE.fy += to_f64(f * dy)
- FORCE.fz += to_f64(f * dz)
- FORCE.p += to_f64(4.0f * r6i*(r6i - 1.0f))
+ f = (48.0 * r6i - 24.0) * r6i * r2i
+ FORCE.fx += f * dx
+ FORCE.fy += f * dy
+ FORCE.fz += f * dz
+ FORCE.p += 4.0 * r6i*(r6i - 1.0)
 endif
