@@ -61,7 +61,7 @@ class Loop
     }
     ret += "} // loop of #{@index}\n"
     if conversion_type == "A64FX"
-      if @interval != "1" && @option == :up
+      if @interval != 1 && @option == :up
         $current_predicate = predicate
         $current_predicate = "svptrue_b#{$min_element_size}()" if $current_predicate == nil
       end
