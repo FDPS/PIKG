@@ -1055,21 +1055,18 @@ class Kernelprogram
         new_exp = exp.replace_fdpsname_recursive(h)
         loop_tmp.statements += [Statement.new([new_name,new_exp])]
         code += loop_tmp.convert_to_code("reference") if !isTail
+      elsif s.class == TableDecl
+        # do nothing
       else
         ss.push(s)
       end
     }
 
     # declare and load TABLE variable
-    tmp = Array.new
-    ss.each{ |s|
+    @statements.each{ |s|
       if s.class == TableDecl
-        ret.push(s)
-        tmp.push(s)
+        code += s.convert_to_code("reference")
       end
-    }
-    tmp.each{ |s|
-      ss.delete(s)
     }
 
     fvars = generate_force_related_map(ss)
