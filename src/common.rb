@@ -197,6 +197,8 @@ def get_name(x)
     ret = get_name(x.exp)
   elsif x.class == String
     ret = x
+  elsif x.class == TableDecl
+    ret = get_name(x.name)
   else
     return nil
     abort "get_name is not allowed to use for #{x.class}"
