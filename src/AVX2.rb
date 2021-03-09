@@ -447,7 +447,7 @@ class Expression
 end
 
 class TableDecl
-  def convert_to_code_a64fx(conversion_code)
+  def convert_to_code_avx2(conversion_code)
     ret = ""
     simd_width = get_simd_width_avx2(@type)
     nreg = (@table.vals.length/simd_width)
