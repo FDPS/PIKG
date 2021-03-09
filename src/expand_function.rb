@@ -14,6 +14,9 @@ end
 
 class Statement
   def expand_function
+    if $varhash[get_name(self)][3] == "local"
+      return [self]
+    end
     exp,statements = @expression.expand_function
     tmp = Statement.new([@name,exp,@type,@op])
     statements += [tmp]
@@ -53,6 +56,7 @@ class FuncCall
   def expand_function
     ret = self.dup
     statements = []
+
     if !$reserved_function.index(@name)
       abort "undefined reference to function #{@name}" if $funchash[@name] == nil
       function = $funchash[@name]
