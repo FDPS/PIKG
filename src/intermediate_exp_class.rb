@@ -225,6 +225,10 @@ class TableDecl
     end
     ret
   end
+
+  def get_related_variable
+    []
+  end
 end
 
 class FloatingPoint
@@ -254,6 +258,9 @@ class FloatingPoint
   def replace_recursive(orig,replaced)
     self.dup
   end
+  def replace_by_list(n,l)
+  end
+
   def isJRelated(list)
     false
   end
@@ -700,6 +707,14 @@ class FuncCall
     FuncCall.new([@name,ops,@type])
   end
 
+  def replace_fdpsname_recursive(h=$varhash)
+    ops = Array.new
+    @ops.each{ |op|
+      ops.push(op.replace_fdpsname_recursive(h))
+    }
+    FuncCall.new([@name,ops,@type])
+  end
+  
   def replace_by_list(name_list,replaced_list)
     name_list.zip(replaced_list){ |n,r|
       self.replace_recursive(n,r)
@@ -809,6 +824,7 @@ class IfElseState
       pg_accum = "pg_accum"
       case @operator
       when :if
+        $predicate_queue.push($current_predicate)
         ret += "{\n"
         $accumulate_predicate = "pg#{$pg_count}"
         $varhash[$accumulate_predicate] = [nil,type,nil,nil]
@@ -1323,6 +1339,13 @@ class MADD
     aop = @aop.replace_recursive(orig,replaced)
     bop = @bop.replace_recursive(orig,replaced)
     cop = @cop.replace_recursive(orig,replaced)
+    MADD.new([@operator,aop,bop,cop,@type])
+  end
+
+  def replace_fdpsname_recursive(h=$varhash)
+    aop = @aop.replace_fdpsname_recursive(h)
+    bop = @bop.replace_fdpsname_recursive(h)
+    cop = @cop.replace_fdpsname_recursive(h)
     MADD.new([@operator,aop,bop,cop,@type])
   end
 
