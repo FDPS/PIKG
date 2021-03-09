@@ -1065,7 +1065,7 @@ class Kernelprogram
     # declare and load TABLE variable
     @statements.each{ |s|
       if s.class == TableDecl
-        code += s.convert_to_code("reference")
+        code += s.convert_to_code(conversion_type)
       end
     }
 
