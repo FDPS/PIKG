@@ -1058,7 +1058,7 @@ class GatherLoad
           index +=  ",#{i*@interval.to_i + @offset.to_i}"
         end
       end
-      ret += "int #{index_name}[#{nelem}] = {#{index}};\n"
+      ret += "alignas(32) int #{index_name}[#{nelem}] = {#{index}};\n"
       index_simd_width = 32 * nelem
       ret += "__m#{index_simd_width}i #{vindex_name} = "
       case index_simd_width
@@ -1081,7 +1081,7 @@ class GatherLoad
           index +=  "#{i*@interval.to_i + @offset.to_i}"
         end
       end
-      ret += "int#{size}_t #{index_name}[#{nelem}] = {#{index}};\n"
+      ret += "alignas(#{size}) int#{size}_t #{index_name}[#{nelem}] = {#{index}};\n"
       ret += "__m512i #{vindex_name} = _mm512_load_epi#{size}(#{index_name});\n"
       ret += "#{@dest.convert_to_code(conversion_type)} = _mm512_i#{size}gather_#{get_type_suffix_avx512(@type)}(#{vindex_name},#{@src.convert_to_code(conversion_type)},#{scale});"
     else
