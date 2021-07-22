@@ -185,11 +185,12 @@ class Accumulate
         sh_suffix = "ps" if size == 32
         sh_suffix = "pd" if size == 64
         lop = "#{src}"
-        lop = "_mm256_castsi256_ps(#{lop})" if type =~ /(S|U)(64|32)/
+        lop = "_mm256_castsi256_#{sh_suffix}(#{lop})" if type =~ /(S|U)(64|32)/
+        
 
         rop = lop
         rop = "_mm256_shuffle_#{sh_suffix}(#{rop},#{rop},#{imm8})"
-        rop = "_mm256_castps_si256(#{rop})" if type =~ /(S|U)(64|32)/
+        rop = "_mm256_cast#{sh_suffix}_si256(#{rop})" if type =~ /(S|U)(64|32)/
         ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},#{rop});\n"
         if size == 32
           rop = lop
@@ -675,7 +676,6 @@ class Kernelprogram
         #ret += ["//downcasting from #{from} to #{to}"]
 
         nline = get_single_data_size(from) / get_single_data_size(to)
-        p "nline:",nline
         ops = Array.new
         tmps = Array.new
         for i in 0...nline
@@ -683,7 +683,6 @@ class Kernelprogram
           replace = "#{orig}_#{i}"
           tmp = Statement.new([s.name,s.expression.ops[0],s.type,s.op])
           tmp.replace_name(orig,replace)
-
           tmps += [tmp]
           ops += [replace]
         end
@@ -715,12 +714,19 @@ class Kernelprogram
     iotype = h[name][0]
     ij = "i"
     ij = "j" if iotype == "EPJ"
+
     get_vector_elements(type).each{|dim|
       dst = name
       dst = Expression.new([:dot,name,dim,type_single]) if dim != ""
-      src = PointerOf.new([type_single,Expression.new([:array,"#{name}_tmp","#{ij}+#{offset}",])])
-      src = PointerOf.new([type_single,Expression.new([:array,"#{name}_tmp_"+dim,"#{ij}+#{offset}",])]) if dim != ""
-      ret += [Load.new([dst,src,nelem*$max_element_size/get_single_data_size(type_single),type_single,iotype,"local"])]
+      src = Expression.new([:array,"#{name}_tmp","#{ij}+#{offset}",])
+      src = Expression.new([:array,"#{name}_tmp_"+dim,"#{ij}+#{offset}",]) if dim != ""
+      #ret += [Load.new([dst,src,nelem*$max_element_size/get_single_data_size(type_single),type_single,iotype,"local"])]
+      if nelem == 1 then
+        ret += [Duplicate.new([dst,src,type_single])]
+      else
+        src = PointerOf.new([type_single,src])
+        ret += [LoadState.new([dst,src,type_single])]
+      end
     }
     ret
   end
@@ -788,7 +794,8 @@ class Kernelprogram
             suffix = "_#{i}" if nsplit > 1
             ret += [Declaration.new([type,name+suffix])]
             get_vector_elements(type).each{ |dim|
-              index = "j+#{i*nelem}"
+              #index = "j+#{i*nelem}"
+              index = "j"
               src = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),index]),fdpsname,type_single])
               src = Expression.new([:dot,src,dim,type_single]) if type =~ /vec/
               src = PointerOf.new([type,src])
@@ -1074,7 +1081,7 @@ class Kernelprogram
     lane_size = 1 if lane_size == 0
 
     split_vars = Array.new
-    ["EPI","FORCE"].each{ |io|
+    ["EPI","EPJ","FORCE"].each{ |io|
       fvars.each{ |v|
         iotype = h[v][0]
         if iotype == io
