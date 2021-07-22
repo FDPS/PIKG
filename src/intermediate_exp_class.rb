@@ -1280,7 +1280,9 @@ class Duplicate
     when /A64FX/
       ret = "#{@name.convert_to_code(conversion_type)} = svdup_n_#{get_type_suffix_a64fx(@type)}(#{@expression.convert_to_code(conversion_type)});"
     when /AVX2/
-      ret = "#{@name.convert_to_code(conversion_type)} = _mm256_set1_#{get_type_suffix_avx2(@type)}(#{@expression.convert_to_code(conversion_type)});"
+      set1_suffix = ""
+      set1_suffix = "x" if @type =~ /(S|U)64/
+      ret = "#{@name.convert_to_code(conversion_type)} = _mm256_set1_#{get_type_suffix_avx2(@type)}#{set1_suffix}(#{@expression.convert_to_code(conversion_type)});"
     when /AVX-512/
       ret = "#{@name.convert_to_code(conversion_type)} = _mm512_set1_#{get_type_suffix_avx512(@type)}(#{@expression.convert_to_code(conversion_type)});"
     end
@@ -1473,8 +1475,10 @@ class Merge
       if suffix == "epi32"
         ret = "_mm256_castps_si256(_mm256_blendv_ps(_mm256_castsi256_ps(#{@op2.convert_to_code(conversion_type)}),_mm256_castsi256_ps(#{@op1.convert_to_code(conversion_type)}),#{predicate}));"
       elsif suffix == "epi64"
-        predicate = "_mm256_castsi256_pd(" + predicate + ")"
-        ret = "_mm256_blendv_pd(_mm256_castsi256_pd(#{@op2.convert_to_code(conversion_type)}),_mm256_castsi256_pd(#{@op1.convert_to_code(conversion_type)}),#{predicate});"
+        #predicate = "_mm256_castsi256_pd(" + predicate + ")"
+        predicate = "_mm256_castps_pd(" + predicate + ")"
+        ret = "_mm256_blendv_pd(_mm256_castsi256_pd(#{@op2.convert_to_code(conversion_type)}),_mm256_castsi256_pd(#{@op1.convert_to_code(conversion_type)}),#{predicate})"
+        ret = "_mm256_castpd_si256(#{ret});"
       else
         predicate = "_mm256_castps_pd(" + predicate + ")" if suffix == "pd"
         ret = "_mm256_blendv_#{suffix}(#{@op2.convert_to_code(conversion_type)},#{@op1.convert_to_code(conversion_type)},#{predicate});"
