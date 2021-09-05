@@ -158,7 +158,7 @@ class Kernelprogram
             message += " "
           end
           message += "^\n"
-          message = "error : undefined reference to \"#{v}\"\n" + message
+          message = "error : undefined reference to \"#{v}\" in check_references\n" + message
           abort message
         end
       }
@@ -1234,6 +1234,9 @@ class Kernelprogram
               related_vars += s.expression.get_related_variable
             end
           elsif s.class == Pragma
+            # do nothing
+          elsif s.class == TableDecl
+            # do nothing
           else
             related_vars += s.expression.get_related_variable
           end

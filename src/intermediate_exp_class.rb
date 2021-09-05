@@ -61,7 +61,7 @@ class Loop
     }
     ret += "} // loop of #{@index}\n"
     if conversion_type == "A64FX"
-      if @interval != "1" && @option == :up
+      if @interval != 1 && @option == :up
         $current_predicate = predicate
         $current_predicate = "svptrue_b#{$min_element_size}()" if $current_predicate == nil
       end
@@ -225,6 +225,10 @@ class TableDecl
     end
     ret
   end
+
+  def get_related_variable
+    []
+  end
 end
 
 class FloatingPoint
@@ -254,6 +258,9 @@ class FloatingPoint
   def replace_recursive(orig,replaced)
     self.dup
   end
+  def replace_by_list(n,l)
+  end
+
   def isJRelated(list)
     false
   end
@@ -700,6 +707,14 @@ class FuncCall
     FuncCall.new([@name,ops,@type])
   end
 
+  def replace_fdpsname_recursive(h=$varhash)
+    ops = Array.new
+    @ops.each{ |op|
+      ops.push(op.replace_fdpsname_recursive(h))
+    }
+    FuncCall.new([@name,ops,@type])
+  end
+  
   def replace_by_list(name_list,replaced_list)
     name_list.zip(replaced_list){ |n,r|
       self.replace_recursive(n,r)
@@ -809,6 +824,7 @@ class IfElseState
       pg_accum = "pg_accum"
       case @operator
       when :if
+        $predicate_queue.push($current_predicate)
         ret += "{\n"
         $accumulate_predicate = "pg#{$pg_count}"
         $varhash[$accumulate_predicate] = [nil,type,nil,nil]
@@ -1042,7 +1058,7 @@ class GatherLoad
           index +=  ",#{i*@interval.to_i + @offset.to_i}"
         end
       end
-      ret += "int #{index_name}[#{nelem}] = {#{index}};\n"
+      ret += "alignas(32) int #{index_name}[#{nelem}] = {#{index}};\n"
       index_simd_width = 32 * nelem
       ret += "__m#{index_simd_width}i #{vindex_name} = "
       case index_simd_width
@@ -1065,7 +1081,7 @@ class GatherLoad
           index +=  "#{i*@interval.to_i + @offset.to_i}"
         end
       end
-      ret += "int#{size}_t #{index_name}[#{nelem}] = {#{index}};\n"
+      ret += "alignas(#{size}) int#{size}_t #{index_name}[#{nelem}] = {#{index}};\n"
       ret += "__m512i #{vindex_name} = _mm512_load_epi#{size}(#{index_name});\n"
       ret += "#{@dest.convert_to_code(conversion_type)} = _mm512_i#{size}gather_#{get_type_suffix_avx512(@type)}(#{vindex_name},#{@src.convert_to_code(conversion_type)},#{scale});"
     else
@@ -1264,7 +1280,9 @@ class Duplicate
     when /A64FX/
       ret = "#{@name.convert_to_code(conversion_type)} = svdup_n_#{get_type_suffix_a64fx(@type)}(#{@expression.convert_to_code(conversion_type)});"
     when /AVX2/
-      ret = "#{@name.convert_to_code(conversion_type)} = _mm256_set1_#{get_type_suffix_avx2(@type)}(#{@expression.convert_to_code(conversion_type)});"
+      set1_suffix = ""
+      set1_suffix = "x" if @type =~ /(S|U)64/
+      ret = "#{@name.convert_to_code(conversion_type)} = _mm256_set1_#{get_type_suffix_avx2(@type)}#{set1_suffix}(#{@expression.convert_to_code(conversion_type)});"
     when /AVX-512/
       ret = "#{@name.convert_to_code(conversion_type)} = _mm512_set1_#{get_type_suffix_avx512(@type)}(#{@expression.convert_to_code(conversion_type)});"
     end
@@ -1323,6 +1341,13 @@ class MADD
     aop = @aop.replace_recursive(orig,replaced)
     bop = @bop.replace_recursive(orig,replaced)
     cop = @cop.replace_recursive(orig,replaced)
+    MADD.new([@operator,aop,bop,cop,@type])
+  end
+
+  def replace_fdpsname_recursive(h=$varhash)
+    aop = @aop.replace_fdpsname_recursive(h)
+    bop = @bop.replace_fdpsname_recursive(h)
+    cop = @cop.replace_fdpsname_recursive(h)
     MADD.new([@operator,aop,bop,cop,@type])
   end
 
@@ -1450,8 +1475,10 @@ class Merge
       if suffix == "epi32"
         ret = "_mm256_castps_si256(_mm256_blendv_ps(_mm256_castsi256_ps(#{@op2.convert_to_code(conversion_type)}),_mm256_castsi256_ps(#{@op1.convert_to_code(conversion_type)}),#{predicate}));"
       elsif suffix == "epi64"
-        predicate = "_mm256_castsi256_pd(" + predicate + ")"
-        ret = "_mm256_blendv_pd(_mm256_castsi256_pd(#{@op2.convert_to_code(conversion_type)}),_mm256_castsi256_pd(#{@op1.convert_to_code(conversion_type)}),#{predicate});"
+        #predicate = "_mm256_castsi256_pd(" + predicate + ")"
+        predicate = "_mm256_castps_pd(" + predicate + ")"
+        ret = "_mm256_blendv_pd(_mm256_castsi256_pd(#{@op2.convert_to_code(conversion_type)}),_mm256_castsi256_pd(#{@op1.convert_to_code(conversion_type)}),#{predicate})"
+        ret = "_mm256_castpd_si256(#{ret});"
       else
         predicate = "_mm256_castps_pd(" + predicate + ")" if suffix == "pd"
         ret = "_mm256_blendv_#{suffix}(#{@op2.convert_to_code(conversion_type)},#{@op1.convert_to_code(conversion_type)},#{predicate});"

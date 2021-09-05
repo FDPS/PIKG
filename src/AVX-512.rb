@@ -304,7 +304,7 @@ class Expression
 end
 
 class TableDecl
-  def convert_to_code_a64fx(conversion_type)
+  def convert_to_code_avx512(conversion_type)
     ret = ""
     nelem = get_num_elem(@type,conversion_type)
     nreg = (@table.vals.length/nelem)
@@ -356,7 +356,7 @@ end
 class String
   def convert_to_code_avx512(conversion_type,h=$varhash)
     name = get_name(self)
-    #abort "error: undefined reference to #{name} in convert_to_code_a64fx of String"
+    #abort "error: undefined reference to #{name} in convert_to_code_avx512 of String"
     s = self
     if h[name] != nil
       iotype = h[name][0]
