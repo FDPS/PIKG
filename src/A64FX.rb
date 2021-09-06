@@ -551,7 +551,7 @@ class Expression
     when :landnot  then
       retval="svbic_b_z(" + predicate + "," + @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ")"
     when :dot   then
-      if (@rop == "x" || @rop == "y" || @rop == "z" || @rop == "w") && @lop.type =~ /vec/
+      if (@rop == "x" || @rop == "y" || @rop == "z" || @rop == "w") && @lop.get_type =~ /vec/
         retval=@lop.convert_to_code(conversion_type)+"."
         retval += ["v0","v1","v2","v3"][["x","y","z","w"].index(@rop)]
         #@rop.convert_to_code(conversion_type)
