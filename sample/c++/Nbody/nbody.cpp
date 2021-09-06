@@ -235,6 +235,7 @@ int main(int argc, char *argv[]) {
   Particle* system_grav = new Particle[nptcl];
   Kernel calcForce(Particle::eps*Particle::eps);
   setParticlesColdUniformSphere(system_grav, nptcl);
+  for(int i=0;i<nptcl;i++) system_grav[i].clear();
   calcForce(system_grav,nptcl,system_grav,nptcl,system_grav);
 
   const PIKG::F32 coef_ema = 0.3;
