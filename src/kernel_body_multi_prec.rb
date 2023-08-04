@@ -77,7 +77,6 @@ class Load
           src = Expression.new([:dot,src,dim,get_single_element_type(@type)]) if dim != ""
           dest = @dest
           dest = Expression.new([:dot,dest,dim,get_single_element_type(@type)]) if dim != ""
-
           ret += "#{@dest.convert_to_code(conversion_type)} = _mm512_set1_#{suffix}(#{src.convert_to_code("reference")});\n"
         }
       when 1
@@ -114,13 +113,17 @@ class Load
       suffix = get_type_suffix_a64fx(type)
       case nlane
       when lane_size
+        # all the input seems to be each element of vector. so, dim should be "".
         get_vector_elements(@type).each{ |dim|
           src = @src
-          src = Expression.new([:dot,src,dim,get_single_element_type(@type)]) if dim != ""
           dest = @dest
-          dest = Expression.new([:dot,dest,dim,get_single_element_type(@type)]) if dim != ""
-
-          ret += "#{@dest.convert_to_code(conversion_type)} = svdup_n_#{suffix}(#{src.convert_to_code("reference")});\n"
+          if dest.class == Expression && dest.operator == :dot
+            ltype=$varhash[dest.lop][1]
+            ret += "svset#{get_vector_dim(ltype)}_#{get_type_suffix_a64fx(dest.type)}(#{dest.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(dest.rop)}, svdup_n_#{suffix}(#{src.convert_to_code(conversion_type)}))"
+          else
+            ret += "#{@dest.convert_to_code(conversion_type)} = svdup_n_#{suffix}(#{src.convert_to_code("reference")});\n"
+          end
+          p dest, src, ret
         }
       when 1
         if @modifier == "local"
@@ -132,6 +135,11 @@ class Load
       end
     end
     ret
+  end
+  def copy_for_swpl(n,index,map)
+    dest = @dest.copy_for_swpl(n,index,map)
+    src = @src.copy_for_swpl(n,index,map)
+    Load.new([dest,src,@nelem,@type,@iotype,@modifier])
   end
 end
 
@@ -1177,20 +1185,23 @@ class Kernelprogram
             else
               if type =~ /vec/
                 stype = type.delete("vec")
-                jjloop.statements += [Statement.new([Expression.new([:dot,name,"x"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"x"]),stype])]
-                jjloop.statements += [Statement.new([Expression.new([:dot,name,"y"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"y"]),stype])]
-                jjloop.statements += [Statement.new([Expression.new([:dot,name,"z"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"z"]),stype])]
+                #jjloop.statements += [Statement.new([Expression.new([:dot,name,"x"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"x"]),stype])]
+                #jjloop.statements += [Statement.new([Expression.new([:dot,name,"y"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"y"]),stype])]
+                #jjloop.statements += [Statement.new([Expression.new([:dot,name,"z"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"z"]),stype])]
+                jjloop.statements += [Load.new([Expression.new([:dot,name,"x",stype]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"x",stype]),ninj[1],stype,iotype])]
+                jjloop.statements += [Load.new([Expression.new([:dot,name,"y",stype]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"y",stype]),ninj[1],stype,iotype])]
+                jjloop.statements += [Load.new([Expression.new([:dot,name,"z",stype]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"z",stype]),ninj[1],stype,iotype])]
               else
                 jjloop.statements += [Statement.new([name,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),type])]
               end
             end
           end
         }
+        #p jjloop.statements
         jjloop.statements += generate_jloop_body(b,fvars,split_vars,conversion_type)
         lsv[0].each{ |v|
           type = h[v][1]
           if type =~ /vec/
-            jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp_x",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","x"]),type])]
             jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp_y",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","y"]),type])]
             jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp_z",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","z"]),type])]
           else
@@ -1203,7 +1214,11 @@ class Kernelprogram
             abort "unroll stage must be multiple of strip mining size" if $strip_mining % $unroll_stage != 0
           end
         } if ps != nil
+        jjloop.statements.each{ |s|
+          #p s
+        }
         jjloop = loop_unroll(jjloop,$accumhash,$unroll_stage) if $unroll_stage > 1
+        #p jjloop.convert_to_code(conversion_type)
         jloop.statements.push(jjloop)
       }
       iloop.statements += [jloop]
@@ -1215,7 +1230,11 @@ class Kernelprogram
       jloop = generate_loop_begin_multi_prec(conversion_type,ninj[1],"j",opt,0)
     end # strip_mining
     jloop.statements += load_jvars(fvars,ninj[1],conversion_type)
+    
     jloop.statements += generate_jloop_body(ss,fvars,split_vars,conversion_type)
+    jloop.statements.each { |s|
+      #p s
+    }
 
     iloop.statements += [jloop]    
 

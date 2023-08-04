@@ -391,7 +391,14 @@ class Declaration
   end
   def convert_to_code(conversion_type="reference")
     @type = @name.get_type if @type == nil
-    "#{get_declare_type(@type,conversion_type)} #{@name.convert_to_code(conversion_type)};\n"
+    ret="#{get_declare_type(@type,conversion_type)} #{@name.convert_to_code(conversion_type)};\n"
+    if conversion_type == "A64FX" && @type =~ /vec/
+      get_vector_elements(type).each{ |dim|
+        ret+="#{get_declare_type(get_single_element_type(@type),conversion_type)} #{(@name + "_" + dim).convert_to_code(conversion_type)};\n"
+      }
+    end
+    
+    ret
   end
 end
 
@@ -522,12 +529,17 @@ class Statement
     #p self
     #p @name
     #p $varhash[@name]
-    if @op == nil
-      ret = @name.convert_to_code(conversion_type) + " = " + @expression.convert_to_code(conversion_type) + ";"
+    if conversion_type == "A64FX" && @name.class == Expression && @name.operator == :dot
+        type=$varhash[@name.lop][1]
+        ret = "svset#{get_vector_dim(type)}_#{get_type_suffix_a64fx(@name.type)}(#{@name.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(@name.rop)}, #{@expression.convert_to_code(conversion_type)});"
     else
-      #warn "convert_to_code for non simple assigned operator is used"
-      #p self
-      ret = @name.convert_to_code(conversion_type) + " = " + Expression.new([@op,@name,@expression,@type]).convert_to_code(conversion_type) + ";"
+      if @op == nil
+        ret = @name.convert_to_code(conversion_type) + " = " + @expression.convert_to_code(conversion_type) + ";"
+      else
+        #warn "convert_to_code for non simple assigned operator is used"
+        #p self
+        ret = @name.convert_to_code(conversion_type) + " = " + Expression.new([@op,@name,@expression,@type]).convert_to_code(conversion_type) + ";"
+      end
     end
     ret
   end
@@ -765,6 +777,9 @@ class Pragma
     []
   end
 
+  def fusion_iotag(iotag)
+    self
+  end
   def convert_to_code(conversion_type="reference")
     ret = String.new
     if conversion_type != "reference"
@@ -971,7 +986,12 @@ class LoadState
     when "reference"
       ret = @dest.convert_to_code(conversion_type) + "=" + @src.convert_to_code(conversion_type) + ";"
     when /A64FX/
-      ret = "#{@dest.convert_to_code(conversion_type)} = svld1_#{get_type_suffix_a64fx(type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)});"
+      if @dest.class == Expression &&  @dest.operator == :dot
+        type=$varhash[@dest.lop][1]
+        ret = "svset#{get_vector_dim(@type)}_#{get_type_suffix_a64fx(type)}(#{dest.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(dest.rop)},#{src.convert_to_code(conversion_type)})"
+      else
+        ret = "#{@dest.convert_to_code(conversion_type)} = svld1_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)});"
+      end
     when /AVX2/
       if @type =~ /^(S|U)(64|32)/
         ret = "#{@dest.convert_to_code(conversion_type)} = _mm256_loadu_si256((__256i const*)#{@src.convert_to_code(conversion_type)});"
@@ -1046,7 +1066,12 @@ class GatherLoad
       size_single = get_single_data_size(@type)
       ret += "uint#{size_single}_t #{index_name}[#{nelem}] = {#{index}};\n"
       ret += "svuint#{size_single}_t #{vindex_name} = svld1_u#{size_single}(#{$current_predicate},#{index_name});\n"
-      ret += "#{@dest.convert_to_code(conversion_type)} = svld1_gather_u#{size_single}index_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)},#{vindex_name});"
+      if @dest.class == Expression &&  @dest.operator == :dot
+        type=$varhash[@dest.lop][1]
+        ret += "svset#{get_vector_dim(type)}_#{get_type_suffix_a64fx(@dest.type)}(#{@dest.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(@dest.rop)}, svld1_gather_u#{size_single}index_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)},#{vindex_name}));"
+      else
+        ret += "#{@dest.convert_to_code(conversion_type)} = svld1_gather_u#{size_single}index_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)},#{vindex_name});"
+      end
     when /AVX2/
       index_name = "index_gather_load#{$gather_load_count}"
       vindex_name = "v" + index_name
@@ -1278,7 +1303,12 @@ class Duplicate
     when "reference"
       ret = "#{@name.convert_to_code(conversion_type)} = #{@expression.convert_to_code(conversion_type)};"
     when /A64FX/
-      ret = "#{@name.convert_to_code(conversion_type)} = svdup_n_#{get_type_suffix_a64fx(@type)}(#{@expression.convert_to_code(conversion_type)});"
+      if @name.class == Expression && @name.operator == :dot
+        type=$varhash[@name.lop][1]
+        ret = "svset#{get_vector_dim(type)}_#{get_type_suffix_a64fx(@name.type)}(#{@name.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(@name.rop)}, svdup_n_#{get_type_suffix_a64fx(@type)}(#{@expression.convert_to_code(conversion_type)}));"
+      else
+        ret = "#{@name.convert_to_code(conversion_type)} = svdup_n_#{get_type_suffix_a64fx(@type)}(#{@expression.convert_to_code(conversion_type)});"
+      end
     when /AVX2/
       set1_suffix = ""
       set1_suffix = "x" if @type =~ /(S|U)64/

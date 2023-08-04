@@ -1692,13 +1692,11 @@ program.disassemble_statement
 program.generate_prototype_decl_file if $c_interface_decl
 program.generate_fortran_module if $fortran_interface
 if $is_multi_walk
-  program.generate_optimized_code_multi_walk($conversion_type);
+  program.generate_optimized_code_multi_walk($conversion_type)
 else
   case $conversion_type
   when "CUDA"
     program.generate_optimized_cuda_kernel($conversion_type)
-#  when "A64FX"
-#    program.generate_optimized_code($conversion_type)
   else
     program.generate_optimized_code_multi_prec($conversion_type)
   end

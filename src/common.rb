@@ -199,6 +199,8 @@ def get_name(x)
     ret = x
   elsif x.class == TableDecl
     ret = get_name(x.name)
+  elsif x.class == Load
+    ret = get_name(x.dest)
   else
     return nil
     abort "get_name is not allowed to use for #{x.class}"

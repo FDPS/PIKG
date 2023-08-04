@@ -139,33 +139,33 @@ class Kernelprogram
 
     code += "svfloat32x2_t svdup_n_f32x3(PIKG::F32vec2 v){\n"
     code += "  svfloat32x2_t ret;\n"
-    code += "  ret.v0 = svdup_n_f32(v.x);\n  ret.v1 = svdup_n_f32(v.y);\n"
+    code += "  svset2_f32(ret,0,svdup_n_f32(v.x));\n  svset2_f32(ret,1,svdup_n_f32(v.y));\n"
     code += "  return ret;\n"
     code +="}\n"
     code += "svfloat32x3_t svdup_n_f32x3(PIKG::F32vec v){\n"
     code += "  svfloat32x3_t ret;\n"
-    code += "  ret.v0 = svdup_n_f32(v.x);\n  ret.v1 = svdup_n_f32(v.y);\n  ret.v2 = svdup_n_f32(v.z);\n"
+    code += "  svset3_f32(ret,0,svdup_n_f32(v.x));\n  svset3_f32(ret,1,svdup_n_f32(v.y));\n  svset3_f32(ret,2,svdup_n_f32(v.z));\n"
     code += "  return ret;\n"
     code +="}\n"
     code += "svfloat32x4_t svdup_n_f32x4(PIKG::F32vec4 v){\n"
     code += "  svfloat32x4_t ret;\n"
-    code += "  ret.v0 = svdup_n_f32(v.x);\n  ret.v1 = svdup_n_f32(v.y);\n  ret.v2 = svdup_n_f32(v.z);\n  ret.v3 = svdup_n_f32(v.w);\n"
+    code += "  svset4_f32(ret,0,svdup_n_f32(v.x));\n  svset4_f32(ret,1,svdup_n_f32(v.y));\n  svset4_f32(ret,2,svdup_n_f32(v.z));\n  svset4_f32(ret,3,svdup_n_f32(v.w));\n"
     code += "  return ret;\n"
     code +="}\n"
 
     code += "svfloat64x2_t svdup_n_f64x3(PIKG::F64vec2 v){\n"
     code += "  svfloat64x2_t ret;\n"
-    code += "  ret.v0 = svdup_n_f64(v.x);\n  ret.v1 = svdup_n_f64(v.y);\n"
+    code += "  svset2_f64(ret,0,svdup_n_f64(v.x));\n  svset2_f64(ret,1,svdup_n_f64(v.y));\n"
     code += "  return ret;\n"
     code +="}\n"
     code += "svfloat64x3_t svdup_n_f64x3(PIKG::F64vec v){\n"
     code += "  svfloat64x3_t ret;\n"
-    code += "  ret.v0 = svdup_n_f64(v.x);\n  ret.v1 = svdup_n_f64(v.y);\n  ret.v2 = svdup_n_f64(v.z);\n"
+    code += "  svset3_f64(ret,0,svdup_n_f64(v.x));\n  svset3_f64(ret,1,svdup_n_f64(v.y));\n  svset3_f64(ret,2,svdup_n_f64(v.z));\n"
     code += "  return ret;\n"
     code +="}\n"
     code += "svfloat64x4_t svdup_n_f64x4(PIKG::F64vec4 v){\n"
     code += "  svfloat64x4_t ret;\n"
-    code += "  ret.v0 = svdup_n_f64(v.x);\n  ret.v1 = svdup_n_f64(v.y);\n  ret.v2 = svdup_n_f64(v.z);\n  ret.v3 = svdup_n_f64(v.w);\n"
+    code += "  svset4_f64(ret,0,svdup_n_f64(v.x));\n  svset4_f64(ret,1,svdup_n_f64(v.y));\n  svset4_f64(ret,2,svdup_n_f64(v.z));\n  svset4_f64(ret,3,svdup_n_f64(v.w));\n"
     code += "  return ret;\n"
     code +="}\n"
 
@@ -552,15 +552,14 @@ class Expression
       retval="svbic_b_z(" + predicate + "," + @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ")"
     when :dot   then
       if (@rop == "x" || @rop == "y" || @rop == "z" || @rop == "w") && @lop.get_type =~ /vec/
-        retval=@lop.convert_to_code(conversion_type)+"."
-        retval += ["v0","v1","v2","v3"][["x","y","z","w"].index(@rop)]
-        #@rop.convert_to_code(conversion_type)
-      elsif @rop == "v0" || @rop == "v1" || @rop == "v2" || @rop == "v3"
-        retval=@lop.convert_to_code(conversion_type)+"." + @rop
-        #@rop.convert_to_code(conversion_type)
+        if @lop.class == String
+          vec_type=$varhash[@lop][1]
+        else
+          vec_type=@lop.type
+        end
+        retval = "svget#{get_vector_dim(vec_type)}_#{type}(#{@lop.convert_to_code(conversion_type)},#{["x","y","z","w"].index(@rop)})"
       else
-        #retval = "#{@lop.convert_to_code(conversion_type)}.#{@rop.convert_to_code(conversion_type)}"
-        retval = "svdup_n_#{type}(#{@lop.convert_to_code(conversion_type)}.#{@rop.convert_to_code(conversion_type)})"
+        retval = "#{@lop.convert_to_code(conversion_type)}.#{@rop.convert_to_code(conversion_type)}"
       end
     when :func  then
       retval=@lop+"("+@rop.convert_to_code(conversion_type)+")"

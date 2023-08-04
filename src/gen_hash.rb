@@ -48,25 +48,25 @@ class Kernelprogram
       "F32"
     when /(half|float16_t|(PS::|PIKG::)?F16)/
       "F16"
-    when /((unsigned\s+long\s+long)(\s+(int))?|uint64_t|(PS::|PIKG::)?U64)/
-      "U64"
-    when /(unsigned(\s+(short))|uint16_t|(PS::|PIKG::)?U16)/
-      "U16"
-    when /(unsigned(\s+long)?(\s+(int))?|uint32_t|(PS::|PIKG::)?U32)/
-      "U32"
     when /(long\s+long(\s+int)?|int64_t|(PS::|PIKG::)?S64)/
       "S64"
     when /(int|int32_t|(PS::|PIKG::)?S32)/
       "S32"
     when /(short|int16_t|(PS::|PIKG::)?S16)/
       "S16"
+    when /(unsigned\s+long\s+long(\s+int)?|uint64_t|(PS::|PIKG::)?U64)/
+      "U64"
+    when /(unsigned(\s+int)?|uint32_t|(PS::|PIKG::)?U32)/
+      "U32"
+    when /(unsigned\s+short|uint16_t|(PS::|PIKG::)?U16)/
+      "U16"
     else
       abort "unsupported c++ type #{type} for cpp_type_to_pikg_type"
     end
   end
   
   def generate_hash_from_cpp(filename,iotype,class_name,h = $varhash)
-    decl = /(const\s+)?(((PS::|PIKG::))?((F|S|U)(64|32|16)(vec(2|3|4)?)?)|(double|float((64|32|16)_t)?|(unsigned)((\s+long)+(\s(int))?|(\s+(int|short)))?|(uint|int)((64|32|16)_t)?|long|short))/
+    decl = /(const)?\ +((PS::|PIKG::)?((F|S)(64|32|16)(vec(2|3|4)?)?)|(double|float((64|32|16)_t)?|(unsigned\ +)?(long\ +)+?int((64|32|16)_t)?))/
     ident=/[a-zA-Z_][a-zA-Z_0-9]*/
     code = String.new
     File.open(filename){ |f|
@@ -94,12 +94,14 @@ class Kernelprogram
         nest_level += 1 if line =~ /\{/
         if nest_level == base_level
           if line =~ /^\s+#{decl}\s+#{ident}(\s*,\s*#{ident})*\s*\n/
+            tmp = line.split(/(\s|,)/).select{ |s| s=~/(#{decl}|#{ident})/}
             type = String.new
-            type = cpp_type_to_pikg_type(line)
-            vars = line.split(/(\s|,)/).select{ |s| s=~/(#{decl}|#{ident})/}
-	    while vars[0] =~ /#{decl}/ do
-	      vars.shift
-	    end
+            type = cpp_type_to_pikg_type(tmp.shift)
+            if type == "const"
+              type = tmp.shift
+            end
+            type = type.gsub("PS::","").gsub("PIKG::","")
+            vars = tmp
             vars.each{ |v|
               h[iotype+"."+v] = [iotype,type,v,nil]
             }
