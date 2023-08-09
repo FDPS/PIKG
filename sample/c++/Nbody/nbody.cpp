@@ -48,8 +48,9 @@ void makeColdUniformSphere(const PIKG::F64 mass_glb,
                            const PIKG::S32 seed = 0) {
   assert(eng < 0.0);
   {
-    std::random_device seed_gen;
-    std::mt19937 engine(seed_gen());
+    //std::random_device seed_gen;
+    //std::mt19937 engine(seed_gen());
+    std::mt19937 engine(0); // For validation, constant seed is used.
     std::uniform_real_distribution<> dist(-1.0, 1.0);
     for(PIKG::S32 i = 0; i < n_loc; i++){
       mass[i] = mass_glb / n_glb;

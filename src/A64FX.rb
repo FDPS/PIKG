@@ -134,6 +134,11 @@ class Kernelprogram
     code += "svfloat64_t poly = svmad_n_f64_z(pg,h,svdup_f64(0.375f),0.5f);\n"
     code += "poly = svmul_f64_z(pg,poly,h);\n"
     code += "rinv = svmad_f64_z(pg,rinv,poly,rinv);\n"
+    code += "h = svmul_f64_z(pg,op,rinv);\n"
+    code += "h = svmsb_n_f64_z(pg,h,rinv,1.f);\n"
+    code += "poly = svmad_n_f64_z(pg,h,svdup_f64(0.375f),0.5f);\n"
+    code += "poly = svmul_f64_z(pg,poly,h);\n"
+    code += "rinv = svmad_f64_z(pg,rinv,poly,rinv);\n"
     code += "return rinv;\n"
     code += "}\n"
 
@@ -552,12 +557,16 @@ class Expression
       retval="svbic_b_z(" + predicate + "," + @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type) + ")"
     when :dot   then
       if (@rop == "x" || @rop == "y" || @rop == "z" || @rop == "w") && @lop.get_type =~ /vec/
-        if @lop.class == String
-          vec_type=$varhash[@lop][1]
+        if @lop.class == Expression && (get_name(@lop) == "epj" || get_name(@lop) == "epi")
+          retval = "#{@lop.convert_to_code(conversion_type)}.#{@rop.convert_to_code(conversion_type)}"
         else
-          vec_type=@lop.type
+          if @lop.class == String
+            vec_type=$varhash[@lop][1]
+          else
+            vec_type=@lop.type
+          end
+          retval = "svget#{get_vector_dim(vec_type)}_#{type}(#{@lop.convert_to_code(conversion_type)},#{["x","y","z","w"].index(@rop)})"
         end
-        retval = "svget#{get_vector_dim(vec_type)}_#{type}(#{@lop.convert_to_code(conversion_type)},#{["x","y","z","w"].index(@rop)})"
       else
         retval = "#{@lop.convert_to_code(conversion_type)}.#{@rop.convert_to_code(conversion_type)}"
       end

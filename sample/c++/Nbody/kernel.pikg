@@ -1,8 +1,13 @@
 F64 eps2
 
+#pragma unroll 6
 rij = EPI.pos - EPJ.pos
 r2 = rij * rij + eps2
+#pragma statement loop_fission_point
+#pragma unroll 12
 r_inv  = rsqrt(r2)
+#pragma statement loop_fission_point
+#pragma unroll 2
 r2_inv = r_inv * r_inv
 mr_inv  = EPJ.mass * r_inv
 mr3_inv = r2_inv * mr_inv

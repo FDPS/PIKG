@@ -1,328 +1,3 @@
-class Load
-  attr_accessor :dest, :src, :nelem, :type, :iotype, :modifier
-  def initialize(x)
-    @dest,@src,@nelem,@type,@iotype,@modifier = x
-  end
-
-  def convert_to_code(conversion_type)
-    #abort "type of lval and rval is different" if @src.get_type != @dest.get_type
-    ret = String.new
-
-    tot, max_byte_size, is_uniform = count_class_member(@iotype)
-    type_single = get_single_element_type(@type)
-    size = get_single_data_size(type_single)
-    lane_size = get_simd_width(conversion_type) / size
-    nlane = lane_size / @nelem
-    offset_gather = ((tot+max_byte_size-1)/max_byte_size * max_byte_size) / byte_count(type_single)
-    case conversion_type
-    when "reference"
-      get_vector_elements(@type).each{ |dim|
-        src = @src
-        src = Expression.new([:dot,src,dim,get_single_element_type(@type)]) if dim != ""
-
-        dest = @dest
-        dest = Expression.new([:dot,dest,dim,get_single_element_type(@type)]) if dim != ""
-        ret += Statement.new([dest,src,@type,nil]).convert_to_code(conversion_type)
-      }
-
-    when "AVX2"
-      suffix = get_type_suffix_avx2(type)
-      set1_suffix = ""
-      set1_suffix = "x" if suffix == "epi64"
-      case nlane
-      when lane_size
-        get_vector_elements(@type).each{ |dim|
-          src = @src
-          src = Expression.new([:dot,src,dim,get_single_element_type(@type)]) if dim != ""
-          dest = @dest
-          dest = Expression.new([:dot,dest,dim,get_single_element_type(@type)]) if dim != ""
-
-          ret += "#{@dest.convert_to_code(conversion_type)} = _mm256_set1_#{suffix}#{set1_suffix}(#{src.convert_to_code("reference")});\n"
-        }
-      when 1
-        if @modifier == "local"
-          ret += LoadState.new([dest,src,type]).convert_to_code(conversion_type)
-        else
-          ret += GatherLoad.new([dest,src,"0","#{offset_gather}",type]).convert_to_code(conversion_type)
-        end
-      else
-        abort "unsupported number of elemet (#{@nelem}) for Load" if nlane <= 0
-        index = String.new
-        if @iotype == "EPI" || @iotype == "FORCE"
-          for j in 0...@nelem
-            for i in 0...nlane
-              index += "," if !(i == 0 && j == 0)
-              index += "#{i*offset_gather}"
-            end
-          end
-        elsif @iotype == "EPJ"
-          for i in 0...nlane
-            for j in 0...@nelem
-              index += "," if !(i==0 && j==0)
-              index += "#{i*offset_gather}"
-            end
-          end
-        else
-          abort
-        end
-
-        ret += GatherLoad.new([dest,src,nil,nil,type]).convert_to_code(conversion_type,index)
-      end
-    when "AVX-512"
-      suffix = get_type_suffix_avx512(type)
-      case nlane
-      when lane_size
-        get_vector_elements(@type).each{ |dim|
-          src = @src
-          src = Expression.new([:dot,src,dim,get_single_element_type(@type)]) if dim != ""
-          dest = @dest
-          dest = Expression.new([:dot,dest,dim,get_single_element_type(@type)]) if dim != ""
-          ret += "#{@dest.convert_to_code(conversion_type)} = _mm512_set1_#{suffix}(#{src.convert_to_code("reference")});\n"
-        }
-      when 1
-        if @modifier == "local"
-          ret += LoadState.new([dest,src,type]).convert_to_code(conversion_type)
-        else
-          ret += GatherLoad.new([dest,src,"0","#{offset_gather}",type]).convert_to_code(conversion_type)
-        end
-      else
-        abort "unsupported number of elemet (#{@nelem}) for Load" if nlane <= 0
-        index = String.new
-        if @iotype == "EPI" || @iotype == "FORCE"
-          p @nelem,nlane
-          for j in 0...@nelem
-            for i in 0...nlane
-              index += "," if !(i == 0 && j == 0)
-              index += "#{i*offset_gather}"
-            end
-          end
-        elsif @iotype == "EPJ"
-          for i in 0...nlane
-            for j in 0...@nelem
-              index += "," if !(i==0 && j==0)
-              index += "#{i*offset_gather}"
-            end
-          end
-        else
-          abort
-        end
-
-        ret += GatherLoad.new([dest,src,nil,nil,type]).convert_to_code(conversion_type,index)
-      end
-    when "A64FX"
-      suffix = get_type_suffix_a64fx(type)
-      case nlane
-      when lane_size
-        # all the input seems to be each element of vector. so, dim should be "".
-        get_vector_elements(@type).each{ |dim|
-          src = @src
-          dest = @dest
-          if dest.class == Expression && dest.operator == :dot
-            ltype=$varhash[dest.lop][1]
-            ret += "svset#{get_vector_dim(ltype)}_#{get_type_suffix_a64fx(dest.type)}(#{dest.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(dest.rop)}, svdup_n_#{suffix}(#{src.convert_to_code(conversion_type)}))"
-          else
-            ret += "#{@dest.convert_to_code(conversion_type)} = svdup_n_#{suffix}(#{src.convert_to_code("reference")});\n"
-          end
-          p dest, src, ret
-        }
-      when 1
-        if @modifier == "local"
-          ret += LoadState.new([dest,src,type]).convert_to_code(conversion_type)
-        else
-          ret += GatherLoad.new([dest,src,"0","#{offset_gather}",type]).convert_to_code(conversion_type)
-        end
-      else
-      end
-    end
-    ret
-  end
-  def copy_for_swpl(n,index,map)
-    dest = @dest.copy_for_swpl(n,index,map)
-    src = @src.copy_for_swpl(n,index,map)
-    Load.new([dest,src,@nelem,@type,@iotype,@modifier])
-  end
-end
-
-class Accumulate
-  attr_accessor :dest, :src, :nelem, :type, :op
-  def initialize(x)
-    @dest,@src,@nelem,@type,@op = x
-  end
-  def convert_to_code(conversion_type)
-    ret = String.new
-
-    tot, max_byte_size, is_uniform = count_class_member("FORCE")
-    type_single = get_single_element_type(@type)
-    size = get_single_data_size(type_single)
-    lane_size = get_simd_width(conversion_type) / $max_element_size
-    nlane = lane_size / @nelem
-
-    offset_scatter = ((tot+max_byte_size-1)/max_byte_size * max_byte_size) / byte_count(type_single)
-
-    case conversion_type
-    when "reference"
-      get_vector_elements(@type).each{ |dim|
-        dest = @dest
-        dest = Expression.new([:dot,dest,dim,get_single_element_type(@type)]) if dim != ""
-        src = @src
-        src = Expression.new([:dot,src,dim,get_single_element_type(@type)]) if dim != ""
-        if @op == "max" || @op == "min"
-          ret += Statement.new([dest,FuncCall.new([@op,[src,dest],@type])]).convert_to_code(conversion_type)
-        else
-          ret += Statement.new([dest,src,@type,:plus]).convert_to_code(conversion_type) if @op == :plus || @op == :minus
-          ret += Statement.new([dest,src,@type,:mult]).convert_to_code(conversion_type) if @op == :mult || @op == :div
-        end
-      }
-    when "AVX2"
-      case nlane
-      when lane_size
-        ret += "{\n"
-        if @op == :plus || @op == :minus
-          op = "add"
-        elsif @op == :mult || @op == :div
-          op = "mul"
-        elsif @op == "max"
-          op = "max"
-        elsif @op == "min"
-          op = "min"
-        end
-        src = @src.convert_to_code(conversion_type)
-        suffix = get_type_suffix_avx2(@type)
-        imm8 = "0b1111" if size == 64
-        imm8 = "0xb1" if size == 32
-        sh_suffix = "ps" if size == 32
-        sh_suffix = "pd" if size == 64
-        lop = "#{src}"
-        lop = "_mm256_castsi256_#{sh_suffix}(#{lop})" if type =~ /(S|U)(64|32)/
-        
-
-        rop = lop
-        rop = "_mm256_shuffle_#{sh_suffix}(#{rop},#{rop},#{imm8})"
-        rop = "_mm256_cast#{sh_suffix}_si256(#{rop})" if type =~ /(S|U)(64|32)/
-        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},#{rop});\n"
-        if size == 32
-          rop = lop
-          rop = "_mm256_shuffle_#{sh_suffix}(#{rop},#{rop},0xee)"
-          rop = "_mm256_castps_si256(#{rop})" if type =~ /(S|U)(64|32)/
-          ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},#{rop});\n"
-        end 
-        ext_suffix = "ps"
-        ext_suffix = "pd" if @type == "F64"
-        rop = src
-        rop = "_mm256_castsi256_ps(#{rop})" if type =~ /(S|U)(64|32)/
-        rop = "_mm256_cast#{ext_suffix}128_#{ext_suffix}256(_mm256_extractf128_#{ext_suffix}(#{rop},1))"
-        rop = "_mm256_cast#{ext_suffix}_si256(#{rop})" if  type =~ /(S|U)(64|32)/
-        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},#{rop});\n"
-        dest_conv = "#{@dest.convert_to_code(conversion_type)}[0]"
-        src_conv = "#{src}[0]"
-        if op == "max" || op == "min"
-          ret += "#{dest_conv} = #{op}(#{dest_conv},(PIKG::#{@type})#{src_conv});"
-        else
-          case op
-          when "add"
-            ret += NonSimdState.new([dest_conv,NonSimdExp.new([:plus,dest_conv,src_conv,@type]),@type,nil]).convert_to_code(conversion_type) + "\n"
-          when "mul"
-            ret += NonSimdState.new([dest_conv,NonSimdExp.new([:mult,dest_conv,src_conv,@type]),@type,nil]).convert_to_code(conversion_type) + "\n"
-          end
-        end
-        ret += "}\n"
-      when 1
-        tmp = "__fkg_tmp_accum"
-        ret += "{\n"
-        ret += Declaration.new([type,tmp]).convert_to_code(conversion_type)
-        ret += GatherLoad.new([tmp,dest,"0","#{offset_scatter}",type]).convert_to_code(conversion_type) + "\n"
-        if @op == "max" || @op == "min"
-          rexp = FuncCall.new([@op,[tmp,@src],type])
-        elsif @op == :plus || @op == :minus
-          rexp = Expression.new([:plus,tmp,@src,type])
-        elsif @op == :mult || @op == :div
-          rexp = Expression.new([:mult,tmp,@src,type])
-        end
-        ret += Statement.new([tmp,rexp]).convert_to_code(conversion_type) + "\n"
-        ret += ScatterStore.new([dest,tmp,"0","#{offset_scatter}",type]).convert_to_code(conversion_type)
-        ret += "}\n"
-      else
-        abort "Accumulate of nlane #{nlane} for AVX2 is not supported"
-      end
-    when "AVX-512"
-      if @op == :plus || @op == :minus
-        op = "add"
-      elsif @op == :mult || @op == :div
-        op = "mul"
-      elsif @op == "max"
-        op = "max"
-      elsif @op == "min"
-        op = "min"
-      end
-      suffix = get_type_suffix_avx512(@type)
-      src = @src.convert_to_code(conversion_type)
-      case nlane
-      when lane_size # 16 for FP32, 8 for FP64
-        if op == "max" || op == "min"
-          ret += "#{@dest.convert_to_code(conversion_type)}[0] = _mm512_reduce_#{op}_#{suffix}(#{src});\n"
-        elsif op == "add"
-          ret += "#{@dest.convert_to_code(conversion_type)}[0] += _mm512_reduce_#{op}_#{suffix}(#{src});\n"
-        elsif op == "mul"
-          ret += "#{@dest.convert_to_code(conversion_type)}[0] *= _mm512_reduce_#{op}_#{suffix}(#{src});\n"
-        else
-          abort "unsupported accumulate operator #{op} for AVX=512"
-        end
-      when 1
-        tmp = "__fkg_tmp_accum"
-        ret += "{\n"
-        ret += Declaration.new([type,tmp]).convert_to_code(conversion_type)
-        ret += GatherLoad.new([tmp,dest,"0","#{offset_scatter}",type]).convert_to_code(conversion_type) + "\n"
-        if @op == "max" || @op == "min"
-          rexp = FuncCall.new([@op,[tmp,@src],type])
-        elsif @op == :plus || @op == :minus
-          rexp = Expression.new([:plus,tmp,@src,type])
-        elsif @op == :mult || @op == :div
-          rexp = Expression.new([:mult,tmp,@src,type])
-        end
-        ret += Statement.new([tmp,rexp]).convert_to_code(conversion_type) + "\n"
-        ret += ScatterStore.new([dest,tmp,"0","#{offset_scatter}",type]).convert_to_code(conversion_type)
-        ret += "}\n"
-      end
-    when "A64FX"
-      if @op == :plus || @op == :minus
-        op = "add"
-      elsif @op == :mult || @op == :div
-        op = "mul"
-      elsif @op == "max"
-        op = "max"
-      elsif @op == "min"
-        op = "min"
-      end
-      suffix = get_type_suffix_a64fx(@type)
-      src = @src.convert_to_code(conversion_type)
-      case nlane
-      when lane_size # 16 for FP32, 8 for FP64
-        ret += "#{@dest.convert_to_code(conversion_type)}[0] += sv#{op}v_#{suffix}(svptrue_b#{$min_element_size}(),#{src});\n"
-      when 1
-        tmp = "__fkg_tmp_accum"
-        ret += "{\n"
-        ret += Declaration.new([type,tmp]).convert_to_code(conversion_type)
-        ret += GatherLoad.new([tmp,dest,"0","#{offset_scatter}",type]).convert_to_code(conversion_type) + "\n"
-        if @op == "max" || @op == "min"
-          rexp = FuncCall.new([@op,[tmp,@src],type])
-        elsif @op == :plus || @op == :minus
-          rexp = Expression.new([:plus,tmp,@src,type])
-        elsif @op == :mult || @op == :div
-          rexp = Expression.new([:mult,tmp,@src,type])
-        end
-        ret += Statement.new([tmp,rexp]).convert_to_code(conversion_type) + "\n"
-        ret += ScatterStore.new([dest,tmp,"0","#{offset_scatter}",type]).convert_to_code(conversion_type)
-        ret += "}\n"
-      else
-        abort "unsupported number of lane per element for A64FX"
-      end
-    else
-      abort "unnsupported conversion_type #{coversion_type} for Accumulate"
-    end
-    ret
-  end
-end
-
 class TailJLoop
   attr_accessor :loop,:ninj,:fvars
   def initialize(x)
@@ -728,13 +403,7 @@ class Kernelprogram
       dst = Expression.new([:dot,name,dim,type_single]) if dim != ""
       src = Expression.new([:array,"#{name}_tmp","#{ij}+#{offset}",])
       src = Expression.new([:array,"#{name}_tmp_"+dim,"#{ij}+#{offset}",]) if dim != ""
-      #ret += [Load.new([dst,src,nelem*$max_element_size/get_single_data_size(type_single),type_single,iotype,"local"])]
-      if nelem == 1 then
-        ret += [Duplicate.new([dst,src,type_single])]
-      else
-        src = PointerOf.new([type_single,src])
-        ret += [LoadState.new([dst,src,type_single])]
-      end
+      ret += [LoadState.new([dst,src,type_single,nelem])]
     }
     ret
   end
@@ -765,10 +434,9 @@ class Kernelprogram
               index = "j+#{offset}" if io == "EPJ"
               src = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),"i+#{offset}"]),fdpsname,type_single])
               src = Expression.new([:dot,src,dim,type_single]) if type =~ /vec/
-              src = PointerOf.new([type,src])
               dest = name
               dest = Expression.new([:dot,name,dim,type_single]) if type =~ /vec/
-              ret += [Load.new([dest,src,nelem*$max_element_size/get_single_data_size(type_single),type_single,iotype])]
+              ret += [LoadState.new([dest,src,type_single,nelem])]
             }
           end
           h[name] = [iotype,type,fdpsname,"alias"] if h[name] == nil
@@ -806,10 +474,9 @@ class Kernelprogram
               index = "j"
               src = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),index]),fdpsname,type_single])
               src = Expression.new([:dot,src,dim,type_single]) if type =~ /vec/
-              src = PointerOf.new([type,src])
               dest = name + suffix
               dest = Expression.new([:dot,name,dim,type_single]) if type =~ /vec/
-              ret += [Load.new([dest,src,nelem,type_single,iotype])]
+              ret += [LoadState.new([dest,src,type_single,nelem])]
             }
           end
         end
@@ -865,7 +532,7 @@ class Kernelprogram
           get_vector_elements(type).zip(accum_hash[v]){ |dim,op|
             dest = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),"i+#{offset}"]),fdpsname,type_single])
             dest = Expression.new([:dot,dest,dim,type_single]) if type =~ /vec/
-            dest = PointerOf.new([type,dest])
+            #dest = PointerOf.new([type,dest])
             src = name
             src = Expression.new([:dot,name,dim,type_single]) if type =~ /vec/
             ret += [Accumulate.new([dest,src,nelem,type_single,op])]
@@ -1020,8 +687,6 @@ class Kernelprogram
 
 
   def kernel_body_multi_prec(ninj,conversion_type,istart=0,h=$varhash,isTail = false)
-    #accum_hash = generate_accum_hash(@statements,h)
-    #return kernel_body(conversion_type,istart,h) if conversion_type == "reference"
     code = String.new
 
     $current_predicate = "svptrue_b#{$min_element_size}()" if conversion_type == "A64FX"
@@ -1160,13 +825,15 @@ class Kernelprogram
           type   = h[v][1]
           if iotype == "declared"
             jjloop.statements.push(Declaration.new([type,v]))
-            if type =~ /vec/
-              jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","x"]),PointerOf.new([type,Expression.new([:array,"#{v}_tmp_x",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),type])]
-              jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","y"]),PointerOf.new([type,Expression.new([:array,"#{v}_tmp_y",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),type])]
-              jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","z"]),PointerOf.new([type,Expression.new([:array,"#{v}_tmp_z",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),type])]
-            else
-              jjloop.statements += [LoadState.new(["#{v}",PointerOf.new([type,Expression.new([:array,"#{v}_tmp",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),type])]
-            end
+            type_single = get_single_element_type(type)
+            get_vector_elements(type).each{ |dim|
+              dest = "#{v}"
+              dest = Expression.new([:dot,dest,dim]) if dim != "" # vector case
+              src  = "#{v}_tmp"
+              src  = "#{src}_#{dim}" if dim != ""
+              src  = PointerOf.new([type_single,Expression.new([:array, src, NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])])
+              jjloop.statements += [StrideLoad.new([dest,src,type_single])]
+            }
           elsif iotype == "EPJ"
             name     = v
             fdpsname = h[v][2]
@@ -1185,14 +852,11 @@ class Kernelprogram
             else
               if type =~ /vec/
                 stype = type.delete("vec")
-                #jjloop.statements += [Statement.new([Expression.new([:dot,name,"x"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"x"]),stype])]
-                #jjloop.statements += [Statement.new([Expression.new([:dot,name,"y"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"y"]),stype])]
-                #jjloop.statements += [Statement.new([Expression.new([:dot,name,"z"]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"z"]),stype])]
-                jjloop.statements += [Load.new([Expression.new([:dot,name,"x",stype]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"x",stype]),ninj[1],stype,iotype])]
-                jjloop.statements += [Load.new([Expression.new([:dot,name,"y",stype]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"y",stype]),ninj[1],stype,iotype])]
-                jjloop.statements += [Load.new([Expression.new([:dot,name,"z",stype]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"z",stype]),ninj[1],stype,iotype])]
+                jjloop.statements += [LoadState.new([Expression.new([:dot,name,"x",stype]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"x",stype]),stype,ninj[1]])]
+                jjloop.statements += [LoadState.new([Expression.new([:dot,name,"y",stype]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"y",stype]),stype,ninj[1]])]
+                jjloop.statements += [LoadState.new([Expression.new([:dot,name,"z",stype]),Expression.new([:dot,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),"z",stype]),stype,ninj[1]])]
               else
-                jjloop.statements += [Statement.new([name,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),type])]
+                jjloop.statements += [LoadState.new([name,Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),jjj]),fdpsname,type]),type,ninj[1]])]
               end
             end
           end
@@ -1202,6 +866,7 @@ class Kernelprogram
         lsv[0].each{ |v|
           type = h[v][1]
           if type =~ /vec/
+            jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp_x",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","x"]),type])]
             jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp_y",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","y"]),type])]
             jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp_z",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","z"]),type])]
           else

@@ -147,6 +147,7 @@ class Kernelprogram
       ref_list.push(v[0])
     }
     @statements.each{ |s|
+      next if s.class == Pragma
       ref_list.push(get_name(s))
       vars = s.get_related_variable
       vars.each{ |v|

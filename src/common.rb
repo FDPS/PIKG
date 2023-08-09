@@ -191,6 +191,8 @@ def get_name(x)
     ret = get_name(x.name)
   elsif x.class == LoadState
     ret = get_name(x.dest)
+  elsif x.class == StrideLoad
+    ret = get_name(x.dest)
   elsif x.class == StoreState
     ret = get_name(x.src)
   elsif x.class == PointerOf
@@ -199,12 +201,11 @@ def get_name(x)
     ret = x
   elsif x.class == TableDecl
     ret = get_name(x.name)
-  elsif x.class == Load
-    ret = get_name(x.dest)
   else
-    return nil
+    #return nil
     abort "get_name is not allowed to use for #{x.class}"
   end
+  #p ret
   ret
 end
 
@@ -367,7 +368,6 @@ def get_single_data_size(type)
   when /16/
     16
   else
-    p type
     abort "unsupported type for get_single_data_size : #{type}"
   end
 end
@@ -482,7 +482,7 @@ def count_class_member(io,h=$varhash)
       next if v[0] =~ /_swpl/
       prev_type = type.delete("vec") if tot == 0
       byte = byte_count(type)
-      tot += byte_count(type) if modifier == nil
+      tot += byte if modifier == nil
       byte = byte / 3 if type =~ /vec/
       max_byte_size = byte if byte > max_byte_size
       is_uniform = false if prev_type != nil && type.delete("vec") != prev_type
@@ -490,4 +490,13 @@ def count_class_member(io,h=$varhash)
   }
   #warn "size of #{io} member is #{max_byte_size}, # of elemennts are #{tot/max_byte_size}" if is_uniform
   [tot,max_byte_size,is_uniform]
+end
+
+def get_structure_load_threshold(conversion_type)
+  case conversion_type
+  when "A64FX"
+    4
+  else
+    0
+  end
 end

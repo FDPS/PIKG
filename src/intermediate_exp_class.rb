@@ -1,4 +1,11 @@
 # class definition
+class PIKGParameters
+  attr_accessor :ni, :nj, :nlane, :n_epi_elem, :n_epj_elem, :is_multi_prec
+  def initialize(x)
+    @ni, @nj, @nlane = *x
+  end
+end
+
 class Kernelprogram
   attr_accessor :iodeclarations, :functions, :statements
   def initialize(x)
@@ -531,7 +538,7 @@ class Statement
     #p $varhash[@name]
     if conversion_type == "A64FX" && @name.class == Expression && @name.operator == :dot
         type=$varhash[@name.lop][1]
-        ret = "svset#{get_vector_dim(type)}_#{get_type_suffix_a64fx(@name.type)}(#{@name.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(@name.rop)}, #{@expression.convert_to_code(conversion_type)});"
+        ret = "#{@name.lop.convert_to_code(conversion_type)}=svset#{get_vector_dim(type)}_#{get_type_suffix_a64fx(@name.type)}(#{@name.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(@name.rop)}, #{@expression.convert_to_code(conversion_type)});"
     else
       if @op == nil
         ret = @name.convert_to_code(conversion_type) + " = " + @expression.convert_to_code(conversion_type) + ";"
@@ -973,6 +980,38 @@ class StoreState
 end
 
 class LoadState
+  attr_accessor :dest, :src, :type, :nlane
+  def initialize(x)
+    @dest, @src, @type, @nlane = *x
+  end
+  def convert_to_code(conversion_type="reference")
+    iotype=$varhash[get_name(@dest)][0] #get_iotype_from_hash($varhash[get_name(@src)])
+    tot, max_byte_size, is_uniform = count_class_member(iotype)
+    type_single = get_single_element_type(@type)
+    size = get_single_data_size(type_single)
+    lane_size = get_simd_width(conversion_type) / size
+    offset = (((tot+max_byte_size-1)/max_byte_size) * max_byte_size) / byte_count(type_single)
+    threshold_structure = get_structure_load_threshold(conversion_type)
+    case @nlane
+    when 1 then
+      ret = Duplicate.new([@dest,@src,@type]).convert_to_code(conversion_type)
+    when lane_size then
+      if offset == 1
+        ret = StrideLoad.new([@dest,PointerOf.new([@type,@src]),@type]).convert_to_code(conversion_type)
+      elsif offset <= threshold_structure
+        ret = StructureLoad.new([@dest,PointerOf.new([@type,@src]),offset,@type]).convert_to_code(conversion_type)
+      else
+        ret = GatherLoad.new([@dest,PointerOf.new([@type,@src]),"0",offset,@type]).convert_to_code(conversion_type)
+      end
+    else
+      p self
+      abort "Unsupported nlanein LoadState"
+    end
+    ret
+  end
+end
+
+class StrideLoad
   attr_accessor :dest,:src,:type
   def initialize(x)
     @dest, @src, @type = x
@@ -988,7 +1027,7 @@ class LoadState
     when /A64FX/
       if @dest.class == Expression &&  @dest.operator == :dot
         type=$varhash[@dest.lop][1]
-        ret = "svset#{get_vector_dim(@type)}_#{get_type_suffix_a64fx(type)}(#{dest.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(dest.rop)},#{src.convert_to_code(conversion_type)})"
+        ret = "#{dest.lop.convert_to_code(conversion_type)}=svset#{get_vector_dim(type)}_#{get_type_suffix_a64fx(type)}(#{dest.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(dest.rop)},svld1_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)}));"
       else
         ret = "#{@dest.convert_to_code(conversion_type)} = svld1_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)});"
       end
@@ -1068,7 +1107,7 @@ class GatherLoad
       ret += "svuint#{size_single}_t #{vindex_name} = svld1_u#{size_single}(#{$current_predicate},#{index_name});\n"
       if @dest.class == Expression &&  @dest.operator == :dot
         type=$varhash[@dest.lop][1]
-        ret += "svset#{get_vector_dim(type)}_#{get_type_suffix_a64fx(@dest.type)}(#{@dest.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(@dest.rop)}, svld1_gather_u#{size_single}index_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)},#{vindex_name}));"
+        ret += "#{@dest.lop.convert_to_code(conversion_type)}=svset#{get_vector_dim(type)}_#{get_type_suffix_a64fx(@dest.type)}(#{@dest.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(@dest.rop)}, svld1_gather_u#{size_single}index_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)},#{vindex_name}));"
       else
         ret += "#{@dest.convert_to_code(conversion_type)} = svld1_gather_u#{size_single}index_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)},#{vindex_name});"
       end
@@ -1202,7 +1241,7 @@ class StructureLoad
     ret = ""
     case conversion_type
     when /A64FX/
-      ret = "#{@dest.convert_to_code(conversion_type)} = svld#{nelem}_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)});"
+      ret = "#{@dest.convert_to_code(conversion_type)} = svld#{@nelem}_#{get_type_suffix_a64fx(@type)}(#{$current_predicate},#{@src.convert_to_code(conversion_type)});"
     when /AVX-512/
       ret = ""
       type_single = get_single_element_type(@type)
@@ -1266,7 +1305,7 @@ class StructureStore
       if true #@nelem != 2 && @nelem != 4
         for i in 0...@nelem
           src = Expression.new([:dot,@src,["x","y","z","w"][i],@type])
-          abort if @type == nil
+          abort "type is nil in StructureStore" if @type == nil
           ret += ScatterStore.new([@dest,src,i,@nelem,@type]).convert_to_code(conversion_type)
         end
       else
@@ -1304,17 +1343,199 @@ class Duplicate
       ret = "#{@name.convert_to_code(conversion_type)} = #{@expression.convert_to_code(conversion_type)};"
     when /A64FX/
       if @name.class == Expression && @name.operator == :dot
-        type=$varhash[@name.lop][1]
-        ret = "svset#{get_vector_dim(type)}_#{get_type_suffix_a64fx(@name.type)}(#{@name.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(@name.rop)}, svdup_n_#{get_type_suffix_a64fx(@type)}(#{@expression.convert_to_code(conversion_type)}));"
+        ret = "#{@name.lop.convert_to_code(conversion_type)}=svset#{get_vector_dim($varhash[@name.lop][1])}_#{get_type_suffix_a64fx(@type)}(#{@name.lop.convert_to_code(conversion_type)}, #{["x","y","z","w"].index(@name.rop)}, svdup_n_#{get_type_suffix_a64fx(@type)}(#{@expression.convert_to_code(conversion_type)}));"
       else
         ret = "#{@name.convert_to_code(conversion_type)} = svdup_n_#{get_type_suffix_a64fx(@type)}(#{@expression.convert_to_code(conversion_type)});"
       end
     when /AVX2/
       set1_suffix = ""
       set1_suffix = "x" if @type =~ /(S|U)64/
-      ret = "#{@name.convert_to_code(conversion_type)} = _mm256_set1_#{get_type_suffix_avx2(@type)}#{set1_suffix}(#{@expression.convert_to_code(conversion_type)});"
+      ret = "#{@name.convert_to_code(conversion_type)} = _mm256_set1_#{get_type_suffix_avx2(@type)}#{set1_suffix}(#{@expression.convert_to_code("reference")});"
     when /AVX-512/
       ret = "#{@name.convert_to_code(conversion_type)} = _mm512_set1_#{get_type_suffix_avx512(@type)}(#{@expression.convert_to_code(conversion_type)});"
+    end
+    ret
+  end
+end
+
+class Accumulate
+  attr_accessor :dest, :src, :nelem, :type, :op
+  def initialize(x)
+    @dest,@src,@nelem,@type,@op = x
+  end
+  def convert_to_code(conversion_type)
+    ret = String.new
+
+    tot, max_byte_size, is_uniform = count_class_member("FORCE")
+    type_single = get_single_element_type(@type)
+    size = get_single_data_size(type_single)
+    lane_size = get_simd_width(conversion_type) / $max_element_size
+    nlane = lane_size / @nelem
+
+    offset_scatter = ((tot+max_byte_size-1)/max_byte_size * max_byte_size) / byte_count(type_single)
+
+    tmp = "__fkg_tmp_accum"
+    $varhash[tmp] = ["declared", type_single, nil] if $varhash[tmp] == nil || $varhash[tmp][2] != type_single
+
+    case conversion_type
+    when "reference"
+      get_vector_elements(@type).each{ |dim|
+        dest = @dest
+        dest = Expression.new([:dot,dest,dim,get_single_element_type(@type)]) if dim != ""
+        src = @src
+        src = Expression.new([:dot,src,dim,get_single_element_type(@type)]) if dim != ""
+        if @op == "max" || @op == "min"
+          ret += Statement.new([dest,FuncCall.new([@op,[src,dest],@type])]).convert_to_code(conversion_type)
+        else
+          ret += Statement.new([dest,src,@type,:plus]).convert_to_code(conversion_type) if @op == :plus || @op == :minus
+          ret += Statement.new([dest,src,@type,:mult]).convert_to_code(conversion_type) if @op == :mult || @op == :div
+        end
+      }
+    when "AVX2"
+      case nlane
+      when lane_size
+        ret += "{\n"
+        if @op == :plus || @op == :minus
+          op = "add"
+        elsif @op == :mult || @op == :div
+          op = "mul"
+        elsif @op == "max"
+          op = "max"
+        elsif @op == "min"
+          op = "min"
+        end
+        src = @src.convert_to_code(conversion_type)
+        suffix = get_type_suffix_avx2(@type)
+        imm8 = "0b1111" if size == 64
+        imm8 = "0xb1" if size == 32
+        sh_suffix = "ps" if size == 32
+        sh_suffix = "pd" if size == 64
+        lop = "#{src}"
+        lop = "_mm256_castsi256_#{sh_suffix}(#{lop})" if type =~ /(S|U)(64|32)/
+
+
+        rop = lop
+        rop = "_mm256_shuffle_#{sh_suffix}(#{rop},#{rop},#{imm8})"
+        rop = "_mm256_cast#{sh_suffix}_si256(#{rop})" if type =~ /(S|U)(64|32)/
+        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},#{rop});\n"
+        if size == 32
+          rop = lop
+          rop = "_mm256_shuffle_#{sh_suffix}(#{rop},#{rop},0xee)"
+          rop = "_mm256_castps_si256(#{rop})" if type =~ /(S|U)(64|32)/
+          ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},#{rop});\n"
+        end
+        ext_suffix = "ps"
+        ext_suffix = "pd" if @type == "F64"
+        rop = src
+        rop = "_mm256_castsi256_ps(#{rop})" if type =~ /(S|U)(64|32)/
+        rop = "_mm256_cast#{ext_suffix}128_#{ext_suffix}256(_mm256_extractf128_#{ext_suffix}(#{rop},1))"
+        rop = "_mm256_cast#{ext_suffix}_si256(#{rop})" if  type =~ /(S|U)(64|32)/
+        ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},#{rop});\n"
+        dest_conv = "#{@dest.convert_to_code(conversion_type)}[0]"
+        src_conv = "#{src}[0]"
+        if op == "max" || op == "min"
+          ret += "#{dest_conv} = #{op}(#{dest_conv},(PIKG::#{@type})#{src_conv});"
+        else
+          case op
+          when "add"
+            ret += NonSimdState.new([dest_conv,NonSimdExp.new([:plus,dest_conv,src_conv,@type]),@type,nil]).convert_to_code(conversion_type) + "\n"
+          when "mul"
+            ret += NonSimdState.new([dest_conv,NonSimdExp.new([:mult,dest_conv,src_conv,@type]),@type,nil]).convert_to_code(conversion_type) + "\n"
+          end
+        end
+        ret += "}\n"
+      when 1
+        tmp = "__fkg_tmp_accum"
+        ret += "{\n"
+        ret += Declaration.new([type,tmp]).convert_to_code(conversion_type)
+        ret += LoadState.new([tmp,dest,type,nlane]).convert_to_code(conversion_type) + "\n"
+        if @op == "max" || @op == "min"
+          rexp = FuncCall.new([@op,[tmp,@src],type])
+        elsif @op == :plus || @op == :minus
+          rexp = Expression.new([:plus,tmp,@src,type])
+        elsif @op == :mult || @op == :div
+          rexp = Expression.new([:mult,tmp,@src,type])
+        end
+        ret += Statement.new([tmp,rexp]).convert_to_code(conversion_type) + "\n"
+        ret += ScatterStore.new([dest,tmp,"0","#{offset_scatter}",type]).convert_to_code(conversion_type)
+        ret += "}\n"
+      else
+        abort "Accumulate of nlane #{nlane} for AVX2 is not supported"
+      end
+    when "AVX-512"
+      if @op == :plus || @op == :minus
+        op = "add"
+      elsif @op == :mult || @op == :div
+        op = "mul"
+      elsif @op == "max"
+        op = "max"
+      elsif @op == "min"
+        op = "min"
+      end
+      suffix = get_type_suffix_avx512(@type)
+      src = @src.convert_to_code(conversion_type)
+      case nlane
+      when lane_size # 16 for FP32, 8 for FP64
+        if op == "max" || op == "min"
+          ret += "#{@dest.convert_to_code(conversion_type)}[0] = _mm512_reduce_#{op}_#{suffix}(#{src});\n"
+        elsif op == "add"
+          ret += "#{@dest.convert_to_code(conversion_type)}[0] += _mm512_reduce_#{op}_#{suffix}(#{src});\n"
+        elsif op == "mul"
+          ret += "#{@dest.convert_to_code(conversion_type)}[0] *= _mm512_reduce_#{op}_#{suffix}(#{src});\n"
+        else
+          abort "unsupported accumulate operator #{op} for AVX=512"
+        end
+      when 1
+        tmp = "__fkg_tmp_accum"
+        ret += "{\n"
+        ret += Declaration.new([type,tmp]).convert_to_code(conversion_type)
+        ret += LoadState.new([tmp,dest,type,nlane]).convert_to_code(conversion_type) + "\n"
+        if @op == "max" || @op == "min"
+          rexp = FuncCall.new([@op,[tmp,@src],type])
+        elsif @op == :plus || @op == :minus
+          rexp = Expression.new([:plus,tmp,@src,type])
+        elsif @op == :mult || @op == :div
+          rexp = Expression.new([:mult,tmp,@src,type])
+        end
+        ret += Statement.new([tmp,rexp]).convert_to_code(conversion_type) + "\n"
+        ret += ScatterStore.new([dest,tmp,"0","#{offset_scatter}",type]).convert_to_code(conversion_type)
+        ret += "}\n"
+      end
+    when "A64FX"
+      if @op == :plus || @op == :minus
+        op = "add"
+      elsif @op == :mult || @op == :div
+        op = "mul"
+      elsif @op == "max"
+        op = "max"
+      elsif @op == "min"
+        op = "min"
+      end
+      suffix = get_type_suffix_a64fx(@type)
+      src = @src.convert_to_code(conversion_type)
+      case nlane
+      when lane_size # 16 for FP32, 8 for FP64
+        ret += "#{@dest.convert_to_code(conversion_type)} += sv#{op}v_#{suffix}(svptrue_b#{$min_element_size}(),#{src});\n"
+      when 1
+        tmp = "__fkg_tmp_accum"
+        ret += "{\n"
+        ret += Declaration.new([type,tmp]).convert_to_code(conversion_type)
+        ret += LoadState.new([tmp,dest,type,@nelem]).convert_to_code(conversion_type) + "\n"
+        if @op == "max" || @op == "min"
+          rexp = FuncCall.new([@op,[tmp,@src],type])
+        elsif @op == :plus || @op == :minus
+          rexp = Expression.new([:plus,tmp,@src,type])
+        elsif @op == :mult || @op == :div
+          rexp = Expression.new([:mult,tmp,@src,type])
+        end
+        ret += Statement.new([tmp,rexp]).convert_to_code(conversion_type) + "\n"
+        ret += ScatterStore.new([PointerOf.new([type,dest]),tmp,"0","#{offset_scatter}",type]).convert_to_code(conversion_type)
+        ret += "}\n"
+      else
+        abort "unsupported number of lane per element for A64FX"
+      end
+    else
+      abort "unnsupported conversion_type #{coversion_type} for Accumulate"
     end
     ret
   end
@@ -1588,8 +1809,7 @@ class Expression
           type = "F16"
         else
           nil[0]
-          warn "error: #{lop} is not vector type!"
-          abort
+          abort "error: #{lop} is not vector type!"
         end
       elsif lop =~ /^\d+$/ && rop =~ /^\d+(f|h)?$/
         if rop =~ /f/ then

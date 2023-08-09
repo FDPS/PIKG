@@ -192,7 +192,15 @@ class LoadState
   def copy_for_swpl(n,index,map)
     dest = @dest.copy_for_swpl(n,index,map)
     src  = @src.copy_for_swpl(n,index,map)
-    LoadState.new([dest,src,@type])
+    LoadState.new([dest,src,@type,@nlane])
+  end
+end
+
+class StrideLoad
+  def copy_for_swpl(n,index,map)
+    dest = @dest.copy_for_swpl(n,index,map)
+    src  = @src.copy_for_swpl(n,index,map)
+    StrideLoad.new([dest,src,@type])
   end
 end
 
@@ -417,13 +425,11 @@ def loop_unroll(orig,accum_hash,nstage = $swpl_stage)
       }
     end
   }
-  #p pipeline[0][0]
   for i in 0...length
     for j in 0...nstage
       loop_tmp.statements.push(pipeline[j][i])
     end
   end
-  #p loop_tmp.statements
   ret.body += [loop_tmp]
   # accumulate unrolled FORCE var to original FORCE var
   tmpvar_map.each{|v|
@@ -473,11 +479,7 @@ def unroll_statement_recursive(s,i,index,unroll_stage=$unroll_stage,tmpvar_map)
     ret.push(cb)
   else
     tmp = s.copy_for_swpl(i,index,tmpvar_map)
-    if s.class == Load
-      iotype = s.iotype
-    else
-      iotype = $varhash[get_name(s)][0]
-    end
+    iotype = $varhash[get_name(s)][0]
     $varhash[get_name(tmp)] = $varhash[get_name(s)].dup if $varhash[get_name(tmp)] == nil
     ret.push(tmp) if s.class != Declaration
   end

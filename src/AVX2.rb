@@ -425,13 +425,8 @@ class Expression
       if @rop == "x" || @rop == "y" || @rop == "z" || @rop == "w"
         retval=lop+"."
         retval += ["v0","v1","v2","v3"][["x","y","z","w"].index(@rop)]
-        #rop
-      elsif @rop == "v0" || @rop == "v1" || @rop == "v2" || @rop == "v3"
-        retval=lop+"." + @rop
-        #rop
       else
-        #retval = "#{lop}.#{rop}"
-        retval = "_mm256_set1_#{type}#{set1_suffix}(#{lop}.#{rop})"
+        retval = "#{lop.convert_to_code(conversion_type)}.#{rop.convert_to_code(conversion_type)}"
       end
     when :func then
       retval = @lop

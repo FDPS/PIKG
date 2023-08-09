@@ -24,7 +24,8 @@ endif
 
 ifeq ($(use_arm_sve),yes)
 CONVERSION_TYPE=A64FX
-CCFLAGS += -Kfast
+PIKG_OPTION+= --strip-mining 24
+CCFLAGS += -march=armv8-a+sve
 HED = kernel.hpp
 endif
 
