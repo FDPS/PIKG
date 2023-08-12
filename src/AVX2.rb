@@ -125,6 +125,12 @@ class Kernelprogram
     code += "  __m256d poly = _mm256_fmadd_pd(h,_mm256_set1_pd(0.375),_mm256_set1_pd(0.5));\n"
     code += "  poly = _mm256_mul_pd(poly,h);\n"
     code += "  y = _mm256_fmadd_pd(y,poly,y);\n"
+
+    code += "  h = _mm256_mul_pd(op,y);\n"
+    code += "  h = _mm256_fnmadd_pd(h,y,_mm256_set1_pd(1.0));\n"
+    code += "  poly = _mm256_fmadd_pd(h,_mm256_set1_pd(0.375),_mm256_set1_pd(0.5));\n"
+    code += "  poly = _mm256_mul_pd(poly,h);\n"
+    code += "  y = _mm256_fmadd_pd(y,poly,y);\n"
     code += "  return y;\n"
 
     code += "}"

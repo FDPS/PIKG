@@ -1135,7 +1135,7 @@ class GatherLoad
     when /AVX-512/
       index_name = "index_gather_load#{$gather_load_count}"
       vindex_name = "v" + index_name
-      nelem = get_num_elem(type,conversion_type)
+      nelem = get_num_elem(@type,conversion_type)
       size = get_single_data_size(@type)
       scale = get_byte_size(@type)
       if index == nil
@@ -1352,7 +1352,7 @@ class Duplicate
       set1_suffix = "x" if @type =~ /(S|U)64/
       ret = "#{@name.convert_to_code(conversion_type)} = _mm256_set1_#{get_type_suffix_avx2(@type)}#{set1_suffix}(#{@expression.convert_to_code("reference")});"
     when /AVX-512/
-      ret = "#{@name.convert_to_code(conversion_type)} = _mm512_set1_#{get_type_suffix_avx512(@type)}(#{@expression.convert_to_code(conversion_type)});"
+      ret = "#{@name.convert_to_code(conversion_type)} = _mm512_set1_#{get_type_suffix_avx512(@type)}(#{@expression.convert_to_code("reference")});"
     end
     ret
   end
@@ -1431,7 +1431,7 @@ class Accumulate
         rop = "_mm256_cast#{ext_suffix}128_#{ext_suffix}256(_mm256_extractf128_#{ext_suffix}(#{rop},1))"
         rop = "_mm256_cast#{ext_suffix}_si256(#{rop})" if  type =~ /(S|U)(64|32)/
         ret += "#{src} = _mm256_#{op}_#{suffix}(#{src},#{rop});\n"
-        dest_conv = "#{@dest.convert_to_code(conversion_type)}[0]"
+	dest_conv = "#{PointerOf.new([@type,@dest]).convert_to_code(conversion_type)}[0]"
         src_conv = "#{src}[0]"
         if op == "max" || op == "min"
           ret += "#{dest_conv} = #{op}(#{dest_conv},(PIKG::#{@type})#{src_conv});"
@@ -1457,7 +1457,7 @@ class Accumulate
           rexp = Expression.new([:mult,tmp,@src,type])
         end
         ret += Statement.new([tmp,rexp]).convert_to_code(conversion_type) + "\n"
-        ret += ScatterStore.new([dest,tmp,"0","#{offset_scatter}",type]).convert_to_code(conversion_type)
+	ret += ScatterStore.new([PointerOf.new([@type,dest]),tmp,"0","#{offset_scatter}",type]).convert_to_code(conversion_type)
         ret += "}\n"
       else
         abort "Accumulate of nlane #{nlane} for AVX2 is not supported"
@@ -1477,14 +1477,15 @@ class Accumulate
       case nlane
       when lane_size # 16 for FP32, 8 for FP64
         if op == "max" || op == "min"
-          ret += "#{@dest.convert_to_code(conversion_type)}[0] = _mm512_reduce_#{op}_#{suffix}(#{src});\n"
+	  reduce = "="
         elsif op == "add"
-          ret += "#{@dest.convert_to_code(conversion_type)}[0] += _mm512_reduce_#{op}_#{suffix}(#{src});\n"
+	  reduce = "+="
         elsif op == "mul"
-          ret += "#{@dest.convert_to_code(conversion_type)}[0] *= _mm512_reduce_#{op}_#{suffix}(#{src});\n"
+	  reduce = "*="
         else
           abort "unsupported accumulate operator #{op} for AVX=512"
         end
+	ret += "#{PointerOf.new([@type,@dest]).convert_to_code(conversion_type)}[0] #{reduce} _mm512_reduce_#{op}_#{suffix}(#{src});\n"
       when 1
         tmp = "__fkg_tmp_accum"
         ret += "{\n"
@@ -1498,7 +1499,7 @@ class Accumulate
           rexp = Expression.new([:mult,tmp,@src,type])
         end
         ret += Statement.new([tmp,rexp]).convert_to_code(conversion_type) + "\n"
-        ret += ScatterStore.new([dest,tmp,"0","#{offset_scatter}",type]).convert_to_code(conversion_type)
+	ret += ScatterStore.new([PointerOf.new([@type,dest]),tmp,"0","#{offset_scatter}",type]).convert_to_code(conversion_type)
         ret += "}\n"
       end
     when "A64FX"
