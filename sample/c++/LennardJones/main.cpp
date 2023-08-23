@@ -7,15 +7,19 @@
 #include <cassert>
 #include <chrono>
 
+#include <pikg_vector.hpp>
+
 struct Particle{
   double rx,ry,rz;
   double vx,vy,vz;
   double fx,fy,fz;
   double p;
+  PIKG::U64 label;
 };
 
 struct EP{
   double rx,ry,rz;
+  PIKG::U64 label;
 };
 
 struct Force{
@@ -41,6 +45,7 @@ void copyToEp(EP* ep,const Particle* ptcls,const int ni){
     ep[i].rx = ptcls[i].rx;
     ep[i].ry = ptcls[i].ry;
     ep[i].rz = ptcls[i].rz;
+    ep[i].label = ptcls[i].label;
   }
 }
 
@@ -131,6 +136,8 @@ int main(int argc,char **argv){
 	ptcls[count].fy = 0.0;
 	ptcls[count].fz = 0.0;
 	ptcls[count].p  = 0.0;
+
+	ptcls[count].label = count;
 	count++;
       }
     }
@@ -198,7 +205,10 @@ int main(int argc,char **argv){
     if(s%100 == 0 && s>=0){
       Energy e = calcEnergy(ptcls,N);
       const double etmp = e.p + e.k;
-      if(s==0) etot = etmp;
+      if(s==0){
+	etot = etmp;
+	std::cout << "# time U K Etot abs((Etot-U-K)/Etot)" << std::endl;
+      }
       std::cout << std::scientific << s*dt << " " << e.p << " " << e.k << " " << etmp << " " << std::abs((etmp - etot)/etot) << std::endl;
 #if 0
       // output cdv
