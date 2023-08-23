@@ -1131,7 +1131,12 @@ class GatherLoad
       when 256
         ret += "_mm256_load_si256((const __m256i*)#{index_name});\n"
       end
-      ret += "#{@dest.convert_to_code(conversion_type)} = _mm256_i32gather_#{get_type_suffix_avx2(@type)}(#{@src.convert_to_code(conversion_type)},#{vindex_name},#{scale});"
+      suffix = get_type_suffix_avx2_wo_epu(@type)
+      src = @src.dup
+      if @src.type =~ /U(64|32|16)/
+	src.type = src.type.sub(/U/,"S")
+      end
+      ret += "#{@dest.convert_to_code(conversion_type)} = _mm256_i32gather_#{suffix}(#{src.convert_to_code(conversion_type)},#{vindex_name},#{scale});"
     when /AVX-512/
       index_name = "index_gather_load#{$gather_load_count}"
       vindex_name = "v" + index_name
@@ -1147,7 +1152,7 @@ class GatherLoad
       end
       ret += "alignas(#{size}) int#{size}_t #{index_name}[#{nelem}] = {#{index}};\n"
       ret += "__m512i #{vindex_name} = _mm512_load_epi#{size}(#{index_name});\n"
-      ret += "#{@dest.convert_to_code(conversion_type)} = _mm512_i#{size}gather_#{get_type_suffix_avx512(@type)}(#{vindex_name},#{@src.convert_to_code(conversion_type)},#{scale});"
+      ret += "#{@dest.convert_to_code(conversion_type)} = _mm512_i#{size}gather_#{get_type_suffix_avx512_wo_epu(@type)}(#{vindex_name},#{@src.convert_to_code(conversion_type)},#{scale});"
     else
       abort "unsupported conversion type for GatherLoad"
     end
@@ -1350,9 +1355,9 @@ class Duplicate
     when /AVX2/
       set1_suffix = ""
       set1_suffix = "x" if @type =~ /(S|U)64/
-      ret = "#{@name.convert_to_code(conversion_type)} = _mm256_set1_#{get_type_suffix_avx2(@type)}#{set1_suffix}(#{@expression.convert_to_code("reference")});"
+      ret = "#{@name.convert_to_code(conversion_type)} = _mm256_set1_#{get_type_suffix_avx2_wo_epu(@type)}#{set1_suffix}(#{@expression.convert_to_code("reference")});"
     when /AVX-512/
-      ret = "#{@name.convert_to_code(conversion_type)} = _mm512_set1_#{get_type_suffix_avx512(@type)}(#{@expression.convert_to_code("reference")});"
+      ret = "#{@name.convert_to_code(conversion_type)} = _mm512_set1_#{get_type_suffix_avx512_wo_epu(@type)}(#{@expression.convert_to_code("reference")});"
     end
     ret
   end
@@ -1724,15 +1729,14 @@ class Merge
       predicate = $current_predicate
       predicate += "_#{@split_index}" if @split_index != nil
       # inactive elements come from first input
-      if suffix == "epi32"
+      if suffix =~ /ep(i|u)32/
         ret = "_mm256_castps_si256(_mm256_blendv_ps(_mm256_castsi256_ps(#{@op2.convert_to_code(conversion_type)}),_mm256_castsi256_ps(#{@op1.convert_to_code(conversion_type)}),#{predicate}));"
-      elsif suffix == "epi64"
+      elsif suffix =~ /ep(i|u)64/
         #predicate = "_mm256_castsi256_pd(" + predicate + ")"
-        predicate = "_mm256_castps_pd(" + predicate + ")"
         ret = "_mm256_blendv_pd(_mm256_castsi256_pd(#{@op2.convert_to_code(conversion_type)}),_mm256_castsi256_pd(#{@op1.convert_to_code(conversion_type)}),#{predicate})"
         ret = "_mm256_castpd_si256(#{ret});"
       else
-        predicate = "_mm256_castps_pd(" + predicate + ")" if suffix == "pd"
+        #predicate = "_mm256_castps_pd(" + predicate + ")" if suffix == "pd"
         ret = "_mm256_blendv_#{suffix}(#{@op2.convert_to_code(conversion_type)},#{@op1.convert_to_code(conversion_type)},#{predicate});"
       end
     when /AVX-512/

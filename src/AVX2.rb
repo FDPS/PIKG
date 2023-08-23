@@ -31,7 +31,7 @@ def get_declare_type_avx2(type)
   when "U16" then
     decl = "__m256i"
   when "B64" then
-    decl = "__m256"
+    decl = "__m256d"
   when "B32" then
     decl = "__m256"
   when "B16" then
@@ -81,6 +81,12 @@ def get_type_suffix_avx2(type)
   else
     abort "error: unsupported suffix of type #{type} for AVX2"
   end
+  suffix
+end
+
+def get_type_suffix_avx2_wo_epu(type)
+  suffix = get_type_suffix_avx2(type)
+  suffix = suffix.sub(/epu/,"epi")
   suffix
 end
 
@@ -293,66 +299,47 @@ end
 
 class Expression
   def convert_to_code_avx2(conversion_type)
-    if [:uminus,:plus,:minus,:mult,:div,:and,:or,:andnot,:dot].index(@operator)
-      case self.get_type
-      when "F64"
-        type = "pd"
-      when "F32"
-        type = "ps"
-      when "F64vec"
-        type = "pdx3"
-      when "F64vec3"
-        type = "pdx3"
-      when "F32vec"
-        type = "psx3"
-      when "F32vec3"
-        type = "psx3"
-      when "F64vec2"
-        type = "pdx2"
-      when "F32vec2"
-        type = "psx2"
-      when "F64vec4"
-        type = "pdx4"
-      when "F32vec4"
-        type = "psx4"
-      when "S64"
-        type = "epi64"
-      when "S32"
-        type = "epi32"
-      when "S16"
-        type = "epi16"
-      when "U64"
-        type = "epu64"
-      when "U32"
-        type = "epu32"
-      when "U16"
-        type = "epu16"
-      else
-        abort "unsupported return type of operator #{@operator} for AVX2"
-      end
-    elsif [:lt,:le,:gt,:ge,:eq,:neq,:land,:lor,:not,:landnot].index(@operator)
-      case @lop.get_type
-      when "F64"
-        type = "pd"
-      when "F32"
-        type = "ps"
-      when "F64vec"
-        type = "pdx3"
-      when "F32vec"
-        type = "psx3"
-      when "S64"
-        type = "pd"
-      when "S32"
-        type = "ps"
-      when "U64"
-        type = "pd"
-      when "U32"
-        type = "ps"
-      when /B/
-        type = "ps"
-      else
-        abort "unsupported mask type for AVX2"
-      end
+    case self.get_type
+    when "F64"
+      type = "pd"
+    when "F32"
+      type = "ps"
+    when "F64vec"
+      type = "pdx3"
+    when "F64vec3"
+      type = "pdx3"
+    when "F32vec"
+      type = "psx3"
+    when "F32vec3"
+      type = "psx3"
+    when "F64vec2"
+      type = "pdx2"
+    when "F32vec2"
+      type = "psx2"
+    when "F64vec4"
+      type = "pdx4"
+    when "F32vec4"
+      type = "psx4"
+    when "S64"
+      type = "epi64"
+    when "S32"
+      type = "epi32"
+    when "S16"
+      type = "epi16"
+    when "U64"
+      type = "epu64"
+    when "U32"
+      type = "epu32"
+    when "U16"
+      type = "epu16"
+    when "B64"
+      type = "pd"
+    when "B32"
+      type = "ps"
+    when "B16"
+      type = "ph"
+    else
+      abort "unsupported return type of operator #{@operator} for AVX2: #{self.get_type}"
     end
 
     retval = "_mm256"
@@ -360,10 +347,10 @@ class Expression
     set1_suffix = "x" if type == "epi64"
     lop = @lop.convert_to_code(conversion_type)
     rop = @rop.convert_to_code(conversion_type) if @rop != nil
-    if [:lt,:le,:gt,:ge,:eq,:neq,:land,:lor,:landnot].index(@operator) && @lop.get_type =~ /(S|U)(64|32)/
-      lop = "_mm256_castsi256_#{type}(" + lop + ")"
-      rop = "_mm256_castsi256_#{type}(" + rop + ")" if @rop != nil
-    end
+    #if [:lt,:le,:gt,:ge,:eq,:neq,:land,:lor,:landnot].index(@operator) && @lop.get_type =~ /(S|U)(64|32)/
+    #  lop = "_mm256_castsi256_#{type}(" + lop + ")"
+    #  rop = "_mm256_castsi256_#{type}(" + rop + ")" if @rop != nil
+    #end
     case @operator
     when :uminus then
       retval += "_sub_#{type}("
@@ -382,51 +369,69 @@ class Expression
       retval += "_div_#{type}("
       retval += lop + "," + rop + ")"
     when :lt then
-      retval += "_cmp_#{type}("
-      retval += lop + "," + rop + ",_CMP_LT_OS)"
-      retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
+      #retval += "_cmp_#{type}("
+      #retval += lop + "," + rop + ",_CMP_LT_OS)"
+      #retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
+      retval = Expression.new([:gt,@rop,@lop,@type]).convert_to_code(conversion_type)
     when :le then
-      retval += "_cmp_#{type}("
-      retval += lop + "," + rop + ",_CMP_LE_OS)"
-      retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
+      if @lop.get_type =~ /(S|U)(16|32|64)/
+	retval = Expression.new([:or,Expression.new([:eq,@lop,@rop,@type]),Expression.new([:lt,@lop,@rop,@type]),@type]).convert_to_code(conversion_type)
+      else
+        retval += "_cmp_#{type}("
+        retval += lop + "," + rop + ",_CMP_LE_OS)"
+      end
     when :gt then
-      retval += "_cmp_#{type}("
-      retval += lop + "," + rop + ",_CMP_GT_OS)"
-      retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
+      if @lop.get_type =~ /(S|U)(16|32|64)/
+        retval += "_cmpgt_#{get_type_suffix_avx2_wo_epu(@lop.get_type)}(#{lop},#{rop})"
+        retval = "_mm256_castsi256_#{type}(#{retval})"
+      else
+        retval += "_cmp_#{type}("
+        retval += lop + "," + rop + ",_CMP_GT_OS)"
+      end
     when :ge then
-      retval += "_cmp_#{type}("
-      retval += lop + "," + rop + ",_CMP_GE_OS)"
-      retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
+      if @lop.get_type =~ /(S|U)(16|32|64)/
+        retval = Expression.new([:or,Expression.new([:eq,@lop,@rop,@type]),Expression.new([:gt,@lop,@rop,@type]),@type]).convert_to_code(conversion_type)
+      else
+        retval += "_cmp_#{type}("
+        retval += lop + "," + rop + ",_CMP_GE_OS)"
+      end
     when :eq then
-      retval += "_cmp_#{type}("
-      retval += lop + "," + rop + ",_CMP_EQ_OQ)"
-      retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
+      if @lop.get_type =~ /(S|U)(16|32|64)/
+	retval += "_cmpeq_#{get_type_suffix_avx2_wo_epu(@lop.get_type)}(#{lop},#{rop})"
+	retval = "_mm256_castsi256_#{type}(#{retval})"
+      else
+        retval += "_cmp_#{type}("
+        retval += lop + "," + rop + ",_CMP_EQ_OQ)"
+      end
     when :neq then
-      retval += "_cmp_#{type}("
-      retval += lop + "," + rop + ",_CMP_NEQ_OQ)"
-      retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
+      if @lop.get_type =~ /(S|U)(16|32|64)/
+	retval = Expression.new([:not,Expression.new([:eq,@lop,@rop,@type]),nil,@type]).convert_to_code(conversion_type)
+      else
+        retval += "_cmp_#{type}("
+        retval += lop + "," + rop + ",_CMP_NEQ_OQ)"
+      end
     when :and then
-      retval += "_and_#{type}("
+      suffix=type
+      suffix = "si256" if suffix =~ /ep(u|i)/
+      retval += "_and_#{suffix}("
       retval += lop + "," + rop + ")"
     when :or then
-      retval += "_or_#{type}("
+      suffix=type
+      suffix = "si256" if suffix =~ /ep(u|i)/
+      retval += "_or_#{suffix}("
       retval += lop + "," + rop + ")"
     when :land then
       retval += "_and_#{type}("
       retval += lop + "," + rop + ")"
-      retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :landnot then # PIKG assume andnot(a,b) = a & (!b), but AVX2 andnot returns (!a) & b
       retval += "_andnot_#{type}("
       retval += rop + "," + lop + ")"
-      retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :lor then
       retval += "_or_#{type}("
       retval += lop + "," + rop + ")"
-      retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :not then
       retval += "_xor_#{type}("
       retval += lop + "," + "_mm256_castsi256_#{type}(_mm256_set1_epi32(-1))" + ")"
-      retval = "_mm256_cast#{type}_ps(" + retval + ")" if type != "ps"
     when :dot then
       if @rop == "x" || @rop == "y" || @rop == "z" || @rop == "w"
         retval=lop+"."
@@ -443,6 +448,7 @@ class Expression
     else
       abort "error: unsupported operator #{@operator} for AVX2"
     end
+ 
     retval
   end
 end

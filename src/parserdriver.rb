@@ -148,7 +148,7 @@ class Kernelprogram
     }
     @statements.each{ |s|
       next if s.class == Pragma
-      ref_list.push(get_name(s))
+      ref_list.push(get_name(s)) if s.class != IfElseState
       vars = s.get_related_variable
       vars.each{ |v|
         if !ref_list.index(v)

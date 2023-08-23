@@ -202,8 +202,8 @@ def get_name(x)
   elsif x.class == TableDecl
     ret = get_name(x.name)
   else
-    #return nil
-    abort "get_name is not allowed to use for #{x.class}"
+    warn "get_name is not allowed to use for #{x.class}"
+    nil[0]
   end
   #p ret
   ret

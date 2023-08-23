@@ -659,8 +659,9 @@ class Kernelprogram
             }
             tmp = Array.new
             tmp_nsplit = Array.new
+	    # check multi precision
             bss.each{ |bs|
-              if fvars.index(get_name(bs)) != nil
+	      if bs.class != ConditionalBranch && fvars.index(get_name(bs)) != nil
                 n = get_single_data_size(bs.get_type) / $min_element_size
                 if n > 1
                   tmp_nsplit.push(n)
