@@ -17,7 +17,7 @@ class Kernelprogram
   def fusion_iotag
     ["EPI","EPJ","FORCE"].each{ |iotag|
       @statements.each{|s|
-        s.fusion_iotag(iotag)
+        s.fusion_iotag(iotag) if s.class != Pragma && s.class != TableDecl
       }
     }
   end

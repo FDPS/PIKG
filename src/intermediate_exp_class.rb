@@ -1605,6 +1605,15 @@ class Expression
   def fusion_iotag(iotag)
     if @lop == iotag && @operator == :dot
       ret = @lop + "_" + @rop
+    elsif @lop.class == Expression && @lop.lop == iotag && @lop.operator == :array
+      tmp = Expression.new([@operator,@lop.lop,@rop,@type])
+      @rop = @lop.rop
+      @lop = tmp
+      @operator = :array
+
+      @lop = @lop.fusion_iotag(iotag)
+      #@rop = @rop.fusion_iotag(iotag)
+      ret = self
     else
       @lop = @lop.fusion_iotag(iotag)
       @rop = @rop.fusion_iotag(iotag) if @rop != nil
