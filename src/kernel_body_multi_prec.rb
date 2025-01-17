@@ -651,12 +651,7 @@ class Kernelprogram
 
   def generate_loop_begin_multi_prec(conversion_type,lane_size,ij,opt=nil,start = nil)
     n = "n"+ij
-    ret = nil;
-    if conversion_type == "reference"
-      ret = Loop.new([ij,start,n,1,[],opt])
-    else
-      ret = Loop.new([ij,start,n,lane_size,[],opt])
-    end
+    ret = Loop.new([ij,start,n,lane_size,[],opt])
     ret
   end
 

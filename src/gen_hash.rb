@@ -17,7 +17,7 @@ class Kernelprogram
   def fusion_iotag
     ["EPI","EPJ","FORCE"].each{ |iotag|
       @statements.each{|s|
-        s.fusion_iotag(iotag)
+        s.fusion_iotag(iotag) if s.class != Pragma && s.class != TableDecl
       }
     }
   end
@@ -66,7 +66,7 @@ class Kernelprogram
   end
   
   def generate_hash_from_cpp(filename,iotype,class_name,h = $varhash)
-    decl = /(const)?\ +((PS::|PIKG::)?((F|S)(64|32|16)(vec(2|3|4)?)?)|(double|float((64|32|16)_t)?|(unsigned\ +)?(long\ +)+?int((64|32|16)_t)?))/
+    decl = /(const)?\ +((PS::|PIKG::)?((F|S|U)(64|32|16)(vec(2|3|4)?)?)|(double|float((64|32|16)_t)?|(unsigned\ +)?(long\ +)+?int((64|32|16)_t)?))/
     ident=/[a-zA-Z_][a-zA-Z_0-9]*/
     code = String.new
     File.open(filename){ |f|
