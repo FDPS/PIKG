@@ -13,27 +13,39 @@ class Kernelprogram
     code += "#include \"#{$force_file}\"\n" if ($force_file != $epi_file) && ($force_file != $epj_file)
     code += "#include \"pikg_cuda_pointer.hpp\"\n"
     code += "#include \"pikg_vector.hpp\"\n"
+
+    code += "__device__ float  table(float  tab[],int i){ return tab[i]; }\n"
+    code += "__device__ double table(double tab[],in5 i){ return tab[i]; }\n"
+
     fvars = generate_force_related_map(@statements)
     # GPU class definition
     code += "struct EpiGPU{\n"
     fvars.each{ |v|
       iotype = h[v][0]
+      modifier = h[v][3]
       if iotype == "EPI"
         type = h[v][1]
-        fdpsname = h[v][2]
-        modifier = h[v][3]
-        code += Declaration.new([type,fdpsname]).convert_to_code(conversion_type)
+        if modifier == "local"
+          code += Declaration.new([type,v]).convert_to_code(conversion_type)
+        else
+          fdpsname = h[v][2]
+          code += Declaration.new([type,fdpsname]).convert_to_code(conversion_type)
+        end
       end
     }
     code += "};\n"
     code += "struct EpjGPU{\n"
     fvars.each{ |v|
       iotype = h[v][0]
+      modifier = h[v][3]
       if iotype == "EPJ"
         type = h[v][1]
-        fdpsname = h[v][2]
-        modifier = h[v][3]
-        code += Declaration.new([type,fdpsname]).convert_to_code(conversion_type)
+        if modifier == "local"
+          code += Declaration.new([type,v]).convert_to_code(conversion_type)
+        else
+          fdpsname = h[v][2]
+          code += Declaration.new([type,fdpsname]).convert_to_code(conversion_type)
+        end
       end
     }
     code += "};\n"
@@ -95,6 +107,20 @@ class Kernelprogram
       end
     }
 
+    split_vars = Array.new
+    ["EPI","EPJ","FORCE"].each{ |io|
+      fvars.each{ |v|
+        iotype = h[v][0]
+        if iotype == io
+          type = h[v][1]
+          fdpsname = h[v][2]
+          modifier = h[v][3]
+          n = get_single_data_size(type) / $min_element_size
+          split_vars += [v] if n > 1
+        end
+      }
+    }
+
     code += "inline __device__ ForceGPU inner_kernel(\n"
     code += "				     EpiGPU epi,\n"
     code += "				     EpjGPU epj,\n"
@@ -112,32 +138,41 @@ class Kernelprogram
     code += "{\n"
     # describe most inner loop
     new_s = Array.new
-    fvars.each{ |v|
-      if $varhash[v][0] == nil # not EPI,EPJorFORCE
-        type = $varhash[v][1]
-        code += Declaration.new([type,v]).convert_to_code(conversion_type)
-      end
-    }
+
     @statements.each{ |s|
-      tmp_s = s
-      fvars.each{ |v|
-        iotype = h[v][0]
-        index = ["EPI","EPJ","FORCE"].index(iotype)
-        if index
-          type = h[v][1]
-          fdpsname = h[v][2]
-          modifier = h[v][3]
-          replaced = ["epi","epj","force"][index] + "." + fdpsname
-          name = tmp_s.name.replace_recursive(v,replaced)
-          exp  = tmp_s.expression.replace_recursive(v,replaced)
-          tmp_s = Statement.new([name,exp,s.type,s.op])
-        end
-      }
-      new_s.push(tmp_s)
+      next if s.class == Pragma or s.class == TableDecl
+      next if s.class == Statement and h[get_name(s)][3] == "local"
+      new_s.push(s)
     }
 
-    new_s.each{ |s|
-      code += s.convert_to_code("reference") + "\n"
+    @statements.each{ |s|
+      code += s.convert_to_code(conversion_type) + "\n" if s.class == TableDecl
+    }
+
+    generate_jloop_body(new_s,fvars,split_vars,conversion_type).each{ |s|
+      tmp_s = s
+      if get_name(tmp_s) != nil
+        fvars.each{ |v|
+          iotype = h[v][0]
+          index = ["EPI","EPJ","FORCE"].index(iotype)
+          if index
+            type = h[v][1]
+            fdpsname = h[v][2]
+            modifier = h[v][3]
+            if modifier == "local"
+              replaced = ["epi","epj","force"][index] + "." + v
+            else
+              replaced = ["epi","epj","force"][index] + "." + fdpsname
+            end
+            name = tmp_s.name.replace_recursive(v,replaced)
+            if s.class == Statement
+              exp  = tmp_s.expression.replace_recursive(v,replaced)
+              tmp_s = Statement.new([name,exp,s.type,s.op])
+            end
+          end
+        }
+      end
+      code += tmp_s.convert_to_code(conversion_type) + "\n"
     }
     code += "  return force;\n"
     code += "}\n"
@@ -376,17 +411,46 @@ class Kernelprogram
     # epi copy to epi_gpu
     fvars.each{ |v|
       iotype = h[v][0]
+      modifier = h[v][3]
       if iotype == "EPI"
         type = h[v][1]
         fdpsname = h[v][2]
-        modifier = h[v][3]
-        get_vector_elements(type).each{|dim|
-          if dim == ""
-            code += "      " + Statement.new(["dev_epi[ni_tot]."+fdpsname,"epi[iw][i]."+fdpsname,type]).convert_to_code("reference") + "\n"
-          else
-            code += "      " + Statement.new(["dev_epi[ni_tot]."+fdpsname+"."+dim,"epi[iw][i]."+fdpsname+"."+dim,type]).convert_to_code("reference") + "\n"
-          end
-        }
+        if modifier == "local"
+          local_s = Array.new
+          @statements.each{ |s|
+            name = get_name(s) if s.class == Statement
+            next if name != v
+            if name != nil && h[name][3] == "local"
+              tail = get_tail(s.name)
+              iotype = h[name][0]
+              type   = h[name][1]
+              exp = s.expression
+              index = get_io_index(iotype)
+              loop_tmp = Loop.new([index,"0","n#{index}",1,[]])
+              if tail != nil
+                new_name = "dev_epi[ni_tot].#{name}.#{tail}"
+              else
+                new_name = "dev_epi[ni_tot].#{name}"
+              end
+              new_exp = exp.replace_fdpsname_recursive(h,true)
+              tmp_s = Statement.new([new_name,new_exp])
+              local_s.push(tmp_s)
+            end          
+          }
+          local_s.each{ |s|
+            code += "      "  + s.convert_to_code("reference") + "\n"
+          }
+        else
+          lhs = "dev_epi[ni_tot]." + fdpsname
+          rhs = "epi[iw][i]." + fdpsname
+          get_vector_elements(type).each{|dim|
+            lhs_dim = lhs
+            lhs_dim = lhs + "." + dim if dim != ""
+            rhs_dim = rhs
+            rhs_dim = rhs + "." + dim if dim != ""
+            code += "      " + Statement.new([lhs_dim,rhs_dim,type]).convert_to_code("reference") + "\n"
+          }
+        end
       end
     }
     code += "      walk[ni_tot] = iw;\n"
@@ -396,17 +460,44 @@ class Kernelprogram
     # epj copy to epj_gpu
     fvars.each{ |v|
       iotype = h[v][0]
+      modifier = h[v][3]
       if iotype == "EPJ"
-        type = h[v][1]
-        fdpsname = h[v][2]
-        modifier = h[v][3]
-        get_vector_elements(type).each{|dim|
-          if dim == ""
-            code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname,"epj[iw][j]."+fdpsname,type]).convert_to_code("reference") + "\n"
-          else
-            code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname+"."+dim,"epj[iw][j]."+fdpsname+"."+dim,type]).convert_to_code("reference") + "\n"
-          end
-        }
+        if modifier == "local"
+          local_s = Array.new
+          @statements.each{ |s|
+            name = get_name(s) if s.class == Statement
+            next if name != v
+            if name != nil && h[name][3] == "local"
+              tail = get_tail(s.name)
+              iotype = h[name][0]
+              type   = h[name][1]
+              exp = s.expression
+              index = get_io_index(iotype)
+              loop_tmp = Loop.new([index,"0","n#{index}",1,[]])
+              if tail != nil
+                new_name = "dev_epj[nj_tot].#{name}.#{tail}"
+              else
+                new_name = "dev_epj[nj_tot].#{name}"
+              end
+              new_exp = exp.replace_fdpsname_recursive(h,true)
+              tmp_s = Statement.new([new_name,new_exp])
+              local_s.push(tmp_s)
+            end          
+          }
+          local_s.each{ |s|
+            code += "      " + s.convert_to_code("reference") + "\n"
+          }
+        else
+          type = h[v][1]
+          fdpsname = h[v][2]
+          get_vector_elements(type).each{|dim|
+            if dim == ""
+              code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname,"epj[iw][j]."+fdpsname,type]).convert_to_code("reference") + "\n"
+            else
+              code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname+"."+dim,"epj[iw][j]."+fdpsname+"."+dim,type]).convert_to_code("reference") + "\n"
+            end
+          }
+        end
       end
     }
     code += "      nj_tot++;\n"
