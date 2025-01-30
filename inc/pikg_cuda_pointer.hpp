@@ -5,7 +5,8 @@
 #include <cstdlib>
 #include <pikg_vector.hpp>
 
-namespace PIKG{
+namespace PIKG_CUDA{
+  using namespace PIKG;
   template <typename T>
   class CUDAPointer{
   public:

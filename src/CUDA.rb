@@ -286,6 +286,7 @@ class Kernelprogram
     code += "                  const EpjGPU * epj, \n"
     code += "                  ForceGPU     * force"
     code += member_decls
+    code += ", bool clear = true"
     code +="){\n"
     code += "  int tid = blockDim.x * blockIdx.x + threadIdx.x;\n"
     # load epi
@@ -309,6 +310,23 @@ class Kernelprogram
       end
     }
     code += "\n"
+    code += "  if(clear){\n"
+    fvars.each{ |v|
+      iotype = h[v][0]
+      if iotype == "FORCE"
+        type = h[v][1]
+        fdpsname = h[v][2]
+        type_single = get_single_element_type(type)
+        get_vector_elements(type).each_with_index{ |dim,j|
+          dest = "force[tid]." + fdpsname
+          dest = dest + "." + dim if dim != ""
+          op = $accumhash[v][j]
+          abort "accum_hash == nil" if $accumhash[v][j] == nil
+          code += "    " + dest + "= 0.f;\n"
+        }
+      end
+    }
+    code += "  }\n"
     code += "  int t_head = blockDim.x * blockIdx.x;\n"
     code += "  int t_tail = t_head + N_THREAD_GPU - 1;\n"
     code += "  int nwalk_in_block = 1 + (walk[t_tail] - walk[t_head]);\n"
@@ -325,14 +343,29 @@ class Kernelprogram
     code += "    accp = ForceKernel_multiwalk(ip, id_walk, ij_disp, epj, accp#{member_vars});\n"
     code += "  }\n"
     # accumulate force
-    code  += "  force[tid] = accp;\n"
+    fvars.each{ |v|
+      iotype = h[v][0]
+      if iotype == "FORCE"
+        type = h[v][1]
+        fdpsname = h[v][2]
+        type_single = get_single_element_type(type)
+        get_vector_elements(type).each_with_index{ |dim,j|
+          dest = "force[tid]." + fdpsname
+          suffix = ""
+          suffix = "." + dim if dim != ""
+          op = $accumhash[v][j]
+          abort "accum_hash == nil" if $accumhash[v][j] == nil
+          code += "    #{dest}#{suffix} += accp.#{fdpsname}#{suffix};\n"
+        }
+      end
+    }
     code += "}\n"
 
-    code += "static PIKG::CUDAPointer<EpiGPU>   dev_epi;\n"
-    code += "static PIKG::CUDAPointer<EpjGPU>   dev_epj;\n"
-    code += "static PIKG::CUDAPointer<ForceGPU> dev_force;\n"
-    code += "static PIKG::CUDAPointer<int>  ij_disp;\n"
-    code += "static PIKG::CUDAPointer<int>   walk;\n"
+    code += "static PIKG_CUDA::CUDAPointer<EpiGPU>   dev_epi;\n"
+    code += "static PIKG_CUDA::CUDAPointer<EpjGPU>   dev_epj;\n"
+    code += "static PIKG_CUDA::CUDAPointer<ForceGPU> dev_force;\n"
+    code += "static PIKG_CUDA::CUDAPointer<int>  ij_disp;\n"
+    code += "static PIKG_CUDA::CUDAPointer<int>   walk;\n"
 
 
 
@@ -373,15 +406,12 @@ class Kernelprogram
     code += "                   const #{$epi_name}    *epi[],\n"
     code += "                   const PIKG::S32          n_epi[],\n"
     code += "                   const #{$epj_name}    *epj[],\n"
-    code += "                   const PIKG::S32          n_epj[]"
+    code += "                   const PIKG::S32          n_epj[],\n"
     if $spj_name != nil
-      code += ",\n"
       code += "               const #{$spj_name} *spj[],\n"
-      code += "               const PIKG::S32        n_spj[]\n"
-      code += ")\n"
-    else
-      code += ")\n"
+      code += "               const PIKG::S32        n_spj[],\n"
     end
+    code += "                   bool clear = true)\n"
     code += "{\n"
     code += "  assert(n_walk <= N_WALK_LIMIT);\n"
     code += "  static bool init_call = true;\n"
@@ -549,7 +579,7 @@ class Kernelprogram
         code += ",#{name}"
       end
     }
-    code += ");\n"
+    code += ",clear);\n"
     code += "\n"
     code += "  return 0;\n"
     code += "}\n"
