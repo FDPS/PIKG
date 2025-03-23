@@ -183,7 +183,7 @@ class Expression
     when :lt then
       retval += "_cmp_#{suffix}_mask("
       retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type)
-      if suffix =~ /epi/
+      if suffix =~ /(epi|epu)/
         retval += ",_MM_CMPINT_LT)"
       else
         retval += ",_CMP_LT_OQ)"
@@ -191,7 +191,7 @@ class Expression
     when :le then
       retval += "_cmp_#{suffix}_mask("
       retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type)
-      if suffix =~ /epi/
+      if suffix =~ /(epi|epu)/
         retval += ",_MM_CMPINT_LE)"
       else
         retval += ",_CMP_LE_OQ)"
@@ -199,7 +199,7 @@ class Expression
     when :gt then
       retval += "_cmp_#{suffix}_mask("
       retval += @rop.convert_to_code(conversion_type) + "," + @lop.convert_to_code(conversion_type)
-      if suffix =~ /epi/
+      if suffix =~ /(epi|epu)/
         retval += ",_MM_CMPINT_LT)"
       else
         retval += ",_CMP_LT_OQ)"
@@ -207,7 +207,7 @@ class Expression
     when :ge then
       retval += "_cmp_#{suffix}_mask("
       retval += @rop.convert_to_code(conversion_type) + "," + @lop.convert_to_code(conversion_type)
-      if suffix =~ /epi/
+      if suffix =~ /(epi|epu)/
         retval += ",_MM_CMPINT_LE)"
       else
         retval += ",_CMP_LE_OQ)"
@@ -215,7 +215,7 @@ class Expression
     when :eq then
       retval += "_cmp_#{suffix}_mask("
       retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type)
-      if suffix =~ /epi/
+      if suffix =~ /(epi|epu)/
         retval += ",_MM_CMPINT_EQ)"
       else
         retval += ",_CMP_EQ_OQ)"
@@ -223,7 +223,7 @@ class Expression
     when :neq then
       retval += "_cmp_#{suffix}_mask("
         retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type)
-      if suffix =~ /epi/
+      if suffix =~ /(epi|epu)/
         retval += ",_MM_CMPINT_NE)"
       else
         retval += ",_CMP_NEQ_OQ)"
@@ -341,11 +341,11 @@ class IntegerValue
     when "S16"
       "_mm512_set1_epi16(#{@val})"
     when "U64"
-      "_mm512_set1_epu64(#{@val})"
+      "_mm512_set1_epi64(#{@val})"
     when "U32"
-      "_mm512_set1_epu32(#{@val})"
+      "_mm512_set1_epi32(#{@val})"
     when "U16"
-      "_mm512_set1_epu16(#{@val})"
+      "_mm512_set1_epi16(#{@val})"
     end
   end
 end
