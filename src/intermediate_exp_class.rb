@@ -231,6 +231,10 @@ class TableDecl
   def get_related_variable
     []
   end
+
+  def fusion_iotag
+    self
+  end
 end
 
 class FloatingPoint
