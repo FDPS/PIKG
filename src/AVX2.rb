@@ -445,11 +445,11 @@ class Expression
 end
 
 class TableDecl
-  def convert_to_code_avx2(conversion_code)
+  def convert_to_code_avx2(conversion_type)
     ret = ""
-    simd_width = get_simd_width_avx2(@type)
-    nreg = (@table.vals.length/simd_width)
-    abort "size of table must be multiple of SIMD width (#{simd_width})" if @table.vals.length%simd_width != 0 || nreg < 1
+    nelem = get_num_elem(@type,conversion_type)
+    nreg = (@table.vals.length/nelem)
+    abort "size of table must be multiple of SIMD register (#{nelem})" if @table.vals.length%nelem != 0 || nreg < 1
 
     for i in 0...nreg
       tmp = self.dup

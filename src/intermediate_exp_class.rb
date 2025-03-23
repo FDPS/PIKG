@@ -220,6 +220,8 @@ class TableDecl
       ret += "};\n"
     when /A64FX/
       ret = convert_to_code_a64fx(conversion_type)
+    when /AVX2/
+      ret = convert_to_code_avx2(conversion_type)
     when /AVX-512/
       ret = convert_to_code_avx512(conversion_type)
     end
