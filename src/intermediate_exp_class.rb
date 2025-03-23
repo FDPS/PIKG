@@ -958,7 +958,7 @@ class StoreState
         ret = "_mm256_storeu_#{get_type_suffix_avx2(@type)}(#{@dest.convert_to_code(conversion_type)},#{@src.convert_to_code(conversion_type)});"
       end
     when /AVX-512/
-      ret = "_mm512_store_#{get_type_suffix_avx512(@type)}(#{@dest.convert_to_code(conversion_type)},#{@src.convert_to_code(conversion_type)});"
+      ret = "_mm512_storeu_#{get_type_suffix_avx512(@type)}(#{@dest.convert_to_code(conversion_type)},#{@src.convert_to_code(conversion_type)});"
     end
   end
 end
@@ -985,7 +985,7 @@ class LoadState
         ret = "#{@dest.convert_to_code(conversion_type)} = _mm256_loadu_#{get_type_suffix_avx512(type)}(#{@src.convert_to_code(conversion_type)});"
       end
     when /AVX-512/
-      ret = "#{@dest.convert_to_code(conversion_type)} = _mm512_load_#{get_type_suffix_avx512(type)}(#{@src.convert_to_code(conversion_type)});"
+      ret = "#{@dest.convert_to_code(conversion_type)} = _mm512_loadu_#{get_type_suffix_avx512(type)}(#{@src.convert_to_code(conversion_type)});"
     end
   end
 end
