@@ -54,7 +54,7 @@ def generate_related_map2(fs,ss,h=$varhash)
           tmp += s.get_related_variable
         elsif s.class == IfElseState
           p s
-          abort
+          abort "error: generate_related_map2"
         end
       end
     }
@@ -189,14 +189,9 @@ class Kernelprogram
     }
   end
   def generate_hash(kerneltype)
-    #    print "print kernel\n"
-    #p self
-    #p $funchash
     #process_iodecl($varhash)
     #process_funcdecl($funchash)
-    #p $varhash
     @statements.each{|s|
-      #p s
       if isStatement(s)
         if s.name.class == Expression
           if s.name.operator == :dot
@@ -217,7 +212,6 @@ class Kernelprogram
           s.add_to_varhash
         end
       elsif s.class == TableDecl
-        #p s
         s.add_to_varhash
       end
     }
@@ -261,6 +255,8 @@ class Kernelprogram
                 operator = "max"
               when "min"
                 operator = "min"
+              when /to_/
+                operator = s.expression.name
               else
                 p s
                 abort "unsupported accumulate fuction #{s.expression.name}"
@@ -353,16 +349,30 @@ class Kernelprogram
   def vector_to_scalar(exp,dim)
     #p "vector_to_scalar:"
     ret = exp.dup
-    if !isLeaf(ret)
-      #p ret
-      ret.type = ret.type.delete("vec") if isVector(ret)
-      ret.lop = vector_to_scalar(ret.lop,dim)
-      ret.rop = vector_to_scalar(ret.rop,dim)
-    else
+    if exp.class == FuncCall
       if isVector(ret)
-        ret = Expression.new([:dot,ret,dim])
-        ret.type = exp.get_type.delete("vec")
-        #ret.type = ret.type.delete("vec")
+        #p ret
+        ret.name = ret.name.split("vec")[0]
+        ops = []
+        ret.ops.each{ |op|
+          #ops.push(op + "." + dim)
+          ops.push(Expression.new([:dot,op,dim]))
+        }
+        ret.ops = ops
+        ret.type = ret.type.split("vec")[0] if ret.type != nil
+      end
+    else
+      if !isLeaf(ret)
+        #p ret
+        ret.type = ret.type.delete("vec") if isVector(ret)
+        ret.lop = vector_to_scalar(ret.lop,dim)
+        ret.rop = vector_to_scalar(ret.rop,dim)
+      else
+        if isVector(ret)
+          ret = Expression.new([:dot,ret,dim])
+          ret.type = exp.get_type.delete("vec")
+          #ret.type = ret.type.delete("vec")
+        end
       end
     end
     ret
@@ -381,8 +391,21 @@ class Kernelprogram
           tmp.type = type
           ret.push(tmp)
         }
+      elsif $reserved_function.index(orig.expression.name) # toXXXvec case
+        func = orig.expression.name.split("vec")[0]
+        type = orig.get_type.split("vec")[0]
+        ops = []
+        ["x","y","z"].each{ |d|
+          val = Expression.new([:dot,orig.name,d,type])
+          exp = vector_to_scalar(orig.expression,d)
+          #p exp
+          tmp = Statement.new([val,exp,type,orig.op])
+          tmp.type = type
+          ret.push(tmp)
+        }
       else
-        abort "function returns vector value is not arrowed (must be expanded before splitting)"
+        p orig
+        abort "user defined function returns vector value is not arrowed (must be expanded before splitting)"
         ret.push(orig)
       end
     else
@@ -1683,7 +1706,6 @@ else
   program.process_iodecl($varhash)
 end
 program.check_references($varhash)
-
 program.generate_hash("noconversion")
 program.expand_function
 program.expand_tree
