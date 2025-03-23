@@ -88,15 +88,12 @@ class Kernelprogram
   def reserved_func_def_avx512(conversion_type)
     code = ""
     code += "__m512 rsqrt(__m512 op){\n"
-    #code += "__m512 rinv = _mm512_rsqrt14_ps(op);\n"
-    #code += "__m512 h = _mm512_mul_ps(op,rinv);\n"
-    #code += "h = _mm512_fnmadd_ps(h,rinv,_mm512_set1_ps(1.f));\n"
-    #code += "__m512 poly = _mm512_fmadd_ps(h,_mm512_set1_ps(0.375f),_mm512_set1_ps(0.5f));\n"
-    #code += "poly = _mm512_mul_ps(poly,h);\n"
-    #code += "rinv = _mm512_fmadd_ps(rinv,poly,rinv);\n"
-    #code += "return rinv;\n"
-
-    code += "return _mm512_rsqrt14_ps(op);\n"
+    code += "  __m512 y = _mm512_rsqrt14_ps(op);\n"
+    code += "  __m512 half = _mm512_set1_ps(0.5f);\n"
+    code += "  __m512 yy = _mm512_mul_ps(y,y);\n"
+    code += "  __m512 hh = _mm512_mul_ps(half,op);\n"
+    code += "  hh = _mm512_fnmadd_ps(yy,hh,half);\n"
+    code += "  return _mm512_fmadd_ps(y,hh,y);\n"
     #code += "return _mm512_rsqrt28_ps(op);\n" # only for AVX-512ER
     code += "}\n"
 
