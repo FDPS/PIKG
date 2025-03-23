@@ -90,7 +90,6 @@ class Load
         abort "unsupported number of elemet (#{@nelem}) for Load" if nlane <= 0
         index = String.new
         if @iotype == "EPI" || @iotype == "FORCE"
-          p @nelem,nlane
           for j in 0...@nelem
             for i in 0...nlane
               index += "," if !(i == 0 && j == 0)
@@ -911,7 +910,6 @@ class Kernelprogram
                 name = lexp + "_#{i}"
                 tmp = Statement.new([s.name.dup,s.expression.ops[0].dup,type_from,s.op])
                 tmp.replace_name(lexp,name)
-                #p s
                 split_vars.each{ |orig|
                   #p "split:",orig
                   #p tmp.expression
@@ -930,10 +928,16 @@ class Kernelprogram
                 op = rexp
                 op += "_#{i/n_from}" if n_from>1
                 name = lexp + "_#{i}"
+                if $varhash[name] == nil
+                  $varhash[name] = [nil,type_to,nil]
+                end
+                if s.name.class == Expression # case of a vector element
+                  name = Expression.new([:dot,name,s.name.rop,s.name.type])
+                end
+
                 tmp = Statement.new([name,Fission.new([op,type_from,type_to,i%(n_to/n_from)]),type_to])
 
-                $varhash[name] = [nil,type_to,nil] if $varhash[name] == nil
-                #ret += tmp.declare_temporal_var
+                ret += tmp.declare_temporal_var
                 ret += [tmp]
               end
               split_vars += [lexp]
@@ -1072,8 +1076,6 @@ class Kernelprogram
     }
 
     fvars = generate_force_related_map(ss)
-    lane_size = get_simd_width(conversion_type) / $min_element_size
-    lane_size = 1 if lane_size == 0
 
     split_vars = Array.new
     ["EPI","EPJ","FORCE"].each{ |io|
@@ -1098,7 +1100,9 @@ class Kernelprogram
     when /AVX/
       opt = :down
     end
-    iloop = generate_loop_begin_multi_prec(conversion_type,ninj[0]*$max_element_size/$min_element_size,"i",opt,istart)
+    inc_i = $max_element_size / $min_element_size
+    inc_i = 1 if conversion_type == "reference"
+    iloop = generate_loop_begin_multi_prec(conversion_type,ninj[0]*inc_i,"i",opt,istart)
     #iloop.statements += load_ivars(conversion_type,lane_size,lane_size/ninj[0],fvars)
 
     # load EPI and FORCE variable
