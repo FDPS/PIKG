@@ -1071,7 +1071,7 @@ class GatherLoad
       when 128
         ret += "_mm_load_si128((const __m128i*)#{index_name});\n"
       when 256
-        ret += "_mm256_load_si256((const __m256i*)#{index_name});\n"
+        ret += "_mm256_loadu_si256((const __m256i*)#{index_name});\n"
       end
       ret += "#{@dest.convert_to_code(conversion_type)} = _mm256_i32gather_#{get_type_suffix_avx2(@type)}(#{@src.convert_to_code(conversion_type)},#{vindex_name},#{scale});"
     when /AVX-512/
@@ -1088,7 +1088,7 @@ class GatherLoad
         end
       end
       ret += "alignas(#{size}) int#{size}_t #{index_name}[#{nelem}] = {#{index}};\n"
-      ret += "__m512i #{vindex_name} = _mm512_load_epi#{size}(#{index_name});\n"
+      ret += "__m512i #{vindex_name} = _mm512_loadu_epi#{size}(#{index_name});\n"
       ret += "#{@dest.convert_to_code(conversion_type)} = _mm512_i#{size}gather_#{get_type_suffix_avx512(@type)}(#{vindex_name},#{@src.convert_to_code(conversion_type)},#{scale});"
     else
       abort "unsupported conversion type for GatherLoad"
@@ -1163,7 +1163,7 @@ class ScatterStore
         end
       end
       ret += "int#{size}_t #{index_name}[#{nelem}] = {#{index}};\n"
-      ret += "__m512i #{vindex_name} = _mm512_load_epi#{size}(#{index_name});\n"
+      ret += "__m512i #{vindex_name} = _mm512_loadu_epi#{size}(#{index_name});\n"
       ret += "_mm512_i#{size}scatter_#{get_type_suffix_avx512(@type)}(#{@dest.convert_to_code(conversion_type)},#{vindex_name},#{@src.convert_to_code(conversion_type)},#{scale});\n"
     else
       abort "unsupported conversion type for ScatterStore"
