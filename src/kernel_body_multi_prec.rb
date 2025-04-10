@@ -872,7 +872,7 @@ class Kernelprogram
     ss.each{ |s|
       #$unroll_stage = s.option[0].to_i if s.class == Pragma && s.name == "unroll"
       next if s.class == Pragma
-      if conversion_type == "reference"
+      if conversion_type =~ /(reference|CUDA)/
         if isStatement(s)
           #ret += s.declare_temporal_var
           ret.push(s)
