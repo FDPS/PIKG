@@ -355,7 +355,6 @@ class Kernelprogram
         ret.name = ret.name.split("vec")[0]
         ops = []
         ret.ops.each{ |op|
-          #ops.push(op + "." + dim)
           ops.push(Expression.new([:dot,op,dim]))
         }
         ret.ops = ops
