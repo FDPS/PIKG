@@ -660,8 +660,8 @@ class FuncCall
       else
         abort "error: undefined reference to function #{@name}"
       end
+      abort "error: function returns vector variable is not supported: #{@name}" if ret_type =~ /vec/
     end
-    abort "error: function returns vector variable is not supported" if ret_type =~ /vec/
     abort "error: type inference failed for #{self}" if ret_type == nil
     ret_type
   end

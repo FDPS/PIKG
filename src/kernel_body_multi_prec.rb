@@ -1152,7 +1152,7 @@ class Kernelprogram
           if iotype == "declared"
             jjloop.statements.push(Declaration.new([type,v]))
             if type =~ /vec/
-	      stype = get_single_element_type(type)
+              stype = get_single_element_type(type)
               jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","x"]),PointerOf.new([stype,Expression.new([:array,"#{v}_tmp_x",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),stype])]
               jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","y"]),PointerOf.new([stype,Expression.new([:array,"#{v}_tmp_y",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),stype])]
               jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","z"]),PointerOf.new([stype,Expression.new([:array,"#{v}_tmp_z",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),stype])]
@@ -1168,10 +1168,10 @@ class Kernelprogram
             case modifier
             when "local"
               if type =~ /vec/
-		stype = get_single_element_type(type)
-                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"x"]),Expression.new([:array,"#{name}_tmp_x",jjj,type]),stype])]
-                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"y"]),Expression.new([:array,"#{name}_tmp_y",jjj,type]),stype])]
-                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"z"]),Expression.new([:array,"#{name}_tmp_z",jjj,type]),stype])] 
+                stype = get_single_element_type(type)
+                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"x"]),Expression.new([:array,"#{name}_tmp_x",jjj,stype]),stype])]
+                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"y"]),Expression.new([:array,"#{name}_tmp_y",jjj,stype]),stype])]
+                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"z"]),Expression.new([:array,"#{name}_tmp_z",jjj,stype]),stype])]
               else
                 jjloop.statements += [Duplicate.new([name,Expression.new([:array,"#{name}_tmp",jjj,type]),type])]
               end
@@ -1191,7 +1191,7 @@ class Kernelprogram
         lsv[0].each{ |v|
           type = h[v][1]
           if type =~ /vec/
-	    stype = get_single_element_type(type)
+            stype = get_single_element_type(type)
             jjloop.statements += [StoreState.new([PointerOf.new([stype,Expression.new([:array,"#{v}_tmp_x",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","x"]),stype])]
             jjloop.statements += [StoreState.new([PointerOf.new([stype,Expression.new([:array,"#{v}_tmp_y",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","y"]),stype])]
             jjloop.statements += [StoreState.new([PointerOf.new([stype,Expression.new([:array,"#{v}_tmp_z",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","z"]),stype])]
