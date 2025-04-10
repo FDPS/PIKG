@@ -88,14 +88,12 @@ class Kernelprogram
   def reserved_func_def_avx2(conversion_type)
     code = ""
     code += "__m256 rsqrt(__m256 op){\n"
-    # code += "  __m256 rinv = _mm256_rsqrt14_ps(op);\n"
-    # code += "  __m256 h = _mm256_mul_ps(op,rinv);\n"
-    # code += "  h = _mm256_fnmadd_ps(h,rinv,_mm256_set1_ps(1.f));\n"
-    # code += "  __m256 poly = _mm256_fmadd_ps(h,_mm256_set1_ps(0.375f),_mm256_set1_ps(0.5f));\n"
-    # code += "  poly = _mm256_mul_ps(poly,h);\n"
-    # code += "  rinv = _mm256_fmadd_ps(rinv,poly,rinv);\n"
-    # code += "  return rinv;\n"
-    code += "  return _mm256_rsqrt_ps(op);\n"
+    code += "  __m256 y = _mm256_rsqrt_ps(op);\n"
+    code += "  __m256 half = _mm256_set1_ps(0.5f);\n"
+    code += "  __m256 yy = _mm256_mul_ps(y,y);\n"
+    code += "  __m256 hh = _mm256_mul_ps(half,op);\n"
+    code += "  hh = _mm256_fnmadd_ps(yy,hh,half);\n"
+    code += "  return _mm256_fmadd_ps(y,hh,y);\n"
     code += "}\n"
 
     code += "__m256 sqrt(__m256 op){ return _mm256_sqrt_ps(op); }\n"
@@ -146,8 +144,8 @@ class Kernelprogram
     code += "__m256i max(__m256i a,__m256i b){ return _mm256_max_epi32(a,b);}\n"
     code += "__m256i min(__m256i a,__m256i b){ return _mm256_min_epi32(a,b);}\n"
 
-    code += "__m256d table(__m256d tab,__m256i index){ return _mm256_permutexvar_pd(index,tab);}\n"
-    code += "__m256  table(__m256  tab,__m256i index){ return _mm256_permutexvar_ps(index,tab);}\n"
+    code += "__m256d table(double* tab,__m256i index){ return _mm256_i64gather_pd(tab,index,8);}\n"
+    code += "__m256  table(float*  tab,__m256i index){ return _mm256_i32gather_ps(tab,index,4);}\n"
 
     #code += "__m256d to_double(__m256i op){ return _mm256_cvt_roundepi64_pd(op,(_MM_FROUND_TO_NEAREST_INT |_MM_FROUND_NO_EXC));}\n"
     code += "__m256  to_float(__m256i op){ return _mm256_cvtepi32_ps(op);}\n"
@@ -156,7 +154,7 @@ class Kernelprogram
     #code += "__m256i  to_long(__m256d op){ return _mm256_cvt_roundpd_epi64(op,(_MM_FROUND_TO_NEAREST_INT |_MM_FROUND_NO_EXC));}\n"
     code += "__m256i  to_int(__m256  op){ return _mm256_cvtps_epi32(op);}\n"
     #code += "__m256i  to_ulong(__m256d op){ return _mm256_cvt_roundpd_epu64(op,(_MM_FROUND_TO_NEAREST_INT |_MM_FROUND_NO_EXC));}\n"
-    #code += "__m256i  to_uint(__m256  op){ return _mm256_cvt_roundps_epu32(op,(_MM_FROUND_TO_NEAREST_INT |_MM_FROUND_NO_EXC));}\n"
+    code += "__m256i  to_uint(__m256  op){ return _mm256_cvtps_epi32(op);}\n"
 
     code += "void transpose2x2_pd(__m256d& a, __m256d& b){\n"
     code += "  __m256d tmp = _mm256_unpacklo_pd(a,b);\n"
@@ -447,20 +445,8 @@ class Expression
 end
 
 class TableDecl
-  def convert_to_code_avx2(conversion_code)
-    ret = ""
-    simd_width = get_simd_width_avx2(@type)
-    nreg = (@table.vals.length/simd_width)
-    abort "size of table must be multiple of SIMD width (#{simd_width})" if @table.vals.length%simd_width != 0 || nreg < 1
-
-    for i in 0...nreg
-      tmp = self.dup
-      tmp.name += "_tmp#{i}"
-      ret += tmp.convert_to_code("reference")
-      ret += "#{get_declare_type_avx2(@type)} #{@name};\n"
-      ret += "#{name} = _mm256_load_ps(#{tmp.name});\n"
-    end
-    ret
+  def convert_to_code_avx2(conversion_type)
+    self.convert_to_code("reference")
   end
 end
 
@@ -487,11 +473,11 @@ class IntegerValue
     when "S16"
       "_mm256_set1_epi16(#{@val})"
     when "U64"
-      "_mm256_set1_epu64(#{@val})"
+      "_mm256_set1_epi64(#{@val})"
     when "U32"
-      "_mm256_set1_epu32(#{@val})"
+      "_mm256_set1_epi32(#{@val})"
     when "U16"
-      "_mm256_set1_epu16(#{@val})"
+      "_mm256_set1_epi16(#{@val})"
     end
   end
 end

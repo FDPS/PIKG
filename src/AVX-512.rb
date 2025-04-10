@@ -88,15 +88,12 @@ class Kernelprogram
   def reserved_func_def_avx512(conversion_type)
     code = ""
     code += "__m512 rsqrt(__m512 op){\n"
-    #code += "__m512 rinv = _mm512_rsqrt14_ps(op);\n"
-    #code += "__m512 h = _mm512_mul_ps(op,rinv);\n"
-    #code += "h = _mm512_fnmadd_ps(h,rinv,_mm512_set1_ps(1.f));\n"
-    #code += "__m512 poly = _mm512_fmadd_ps(h,_mm512_set1_ps(0.375f),_mm512_set1_ps(0.5f));\n"
-    #code += "poly = _mm512_mul_ps(poly,h);\n"
-    #code += "rinv = _mm512_fmadd_ps(rinv,poly,rinv);\n"
-    #code += "return rinv;\n"
-
-    code += "return _mm512_rsqrt14_ps(op);\n"
+    code += "  __m512 y = _mm512_rsqrt14_ps(op);\n"
+    code += "  __m512 half = _mm512_set1_ps(0.5f);\n"
+    code += "  __m512 yy = _mm512_mul_ps(y,y);\n"
+    code += "  __m512 hh = _mm512_mul_ps(half,op);\n"
+    code += "  hh = _mm512_fnmadd_ps(yy,hh,half);\n"
+    code += "  return _mm512_fmadd_ps(y,hh,y);\n"
     #code += "return _mm512_rsqrt28_ps(op);\n" # only for AVX-512ER
     code += "}\n"
 
@@ -186,7 +183,7 @@ class Expression
     when :lt then
       retval += "_cmp_#{suffix}_mask("
       retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type)
-      if suffix =~ /epi/
+      if suffix =~ /(epi|epu)/
         retval += ",_MM_CMPINT_LT)"
       else
         retval += ",_CMP_LT_OQ)"
@@ -194,7 +191,7 @@ class Expression
     when :le then
       retval += "_cmp_#{suffix}_mask("
       retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type)
-      if suffix =~ /epi/
+      if suffix =~ /(epi|epu)/
         retval += ",_MM_CMPINT_LE)"
       else
         retval += ",_CMP_LE_OQ)"
@@ -202,7 +199,7 @@ class Expression
     when :gt then
       retval += "_cmp_#{suffix}_mask("
       retval += @rop.convert_to_code(conversion_type) + "," + @lop.convert_to_code(conversion_type)
-      if suffix =~ /epi/
+      if suffix =~ /(epi|epu)/
         retval += ",_MM_CMPINT_LT)"
       else
         retval += ",_CMP_LT_OQ)"
@@ -210,7 +207,7 @@ class Expression
     when :ge then
       retval += "_cmp_#{suffix}_mask("
       retval += @rop.convert_to_code(conversion_type) + "," + @lop.convert_to_code(conversion_type)
-      if suffix =~ /epi/
+      if suffix =~ /(epi|epu)/
         retval += ",_MM_CMPINT_LE)"
       else
         retval += ",_CMP_LE_OQ)"
@@ -218,7 +215,7 @@ class Expression
     when :eq then
       retval += "_cmp_#{suffix}_mask("
       retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type)
-      if suffix =~ /epi/
+      if suffix =~ /(epi|epu)/
         retval += ",_MM_CMPINT_EQ)"
       else
         retval += ",_CMP_EQ_OQ)"
@@ -226,7 +223,7 @@ class Expression
     when :neq then
       retval += "_cmp_#{suffix}_mask("
         retval += @lop.convert_to_code(conversion_type) + "," + @rop.convert_to_code(conversion_type)
-      if suffix =~ /epi/
+      if suffix =~ /(epi|epu)/
         retval += ",_MM_CMPINT_NE)"
       else
         retval += ",_CMP_NEQ_OQ)"
@@ -344,11 +341,11 @@ class IntegerValue
     when "S16"
       "_mm512_set1_epi16(#{@val})"
     when "U64"
-      "_mm512_set1_epu64(#{@val})"
+      "_mm512_set1_epi64(#{@val})"
     when "U32"
-      "_mm512_set1_epu32(#{@val})"
+      "_mm512_set1_epi32(#{@val})"
     when "U16"
-      "_mm512_set1_epu16(#{@val})"
+      "_mm512_set1_epi16(#{@val})"
     end
   end
 end

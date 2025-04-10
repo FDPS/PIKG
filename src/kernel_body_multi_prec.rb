@@ -90,7 +90,6 @@ class Load
         abort "unsupported number of elemet (#{@nelem}) for Load" if nlane <= 0
         index = String.new
         if @iotype == "EPI" || @iotype == "FORCE"
-          p @nelem,nlane
           for j in 0...@nelem
             for i in 0...nlane
               index += "," if !(i == 0 && j == 0)
@@ -911,7 +910,6 @@ class Kernelprogram
                 name = lexp + "_#{i}"
                 tmp = Statement.new([s.name.dup,s.expression.ops[0].dup,type_from,s.op])
                 tmp.replace_name(lexp,name)
-                #p s
                 split_vars.each{ |orig|
                   #p "split:",orig
                   #p tmp.expression
@@ -930,10 +928,16 @@ class Kernelprogram
                 op = rexp
                 op += "_#{i/n_from}" if n_from>1
                 name = lexp + "_#{i}"
+                if $varhash[name] == nil
+                  $varhash[name] = [nil,type_to,nil]
+                end
+                if s.name.class == Expression # case of a vector element
+                  name = Expression.new([:dot,name,s.name.rop,s.name.type])
+                end
+
                 tmp = Statement.new([name,Fission.new([op,type_from,type_to,i%(n_to/n_from)]),type_to])
 
-                $varhash[name] = [nil,type_to,nil] if $varhash[name] == nil
-                #ret += tmp.declare_temporal_var
+                ret += tmp.declare_temporal_var
                 ret += [tmp]
               end
               split_vars += [lexp]
@@ -1072,8 +1076,6 @@ class Kernelprogram
     }
 
     fvars = generate_force_related_map(ss)
-    lane_size = get_simd_width(conversion_type) / $min_element_size
-    lane_size = 1 if lane_size == 0
 
     split_vars = Array.new
     ["EPI","EPJ","FORCE"].each{ |io|
@@ -1098,7 +1100,9 @@ class Kernelprogram
     when /AVX/
       opt = :down
     end
-    iloop = generate_loop_begin_multi_prec(conversion_type,ninj[0]*$max_element_size/$min_element_size,"i",opt,istart)
+    inc_i = $max_element_size / $min_element_size
+    inc_i = 1 if conversion_type == "reference"
+    iloop = generate_loop_begin_multi_prec(conversion_type,ninj[0]*inc_i,"i",opt,istart)
     #iloop.statements += load_ivars(conversion_type,lane_size,lane_size/ninj[0],fvars)
 
     # load EPI and FORCE variable
@@ -1148,9 +1152,10 @@ class Kernelprogram
           if iotype == "declared"
             jjloop.statements.push(Declaration.new([type,v]))
             if type =~ /vec/
-              jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","x"]),PointerOf.new([type,Expression.new([:array,"#{v}_tmp_x",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),type])]
-              jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","y"]),PointerOf.new([type,Expression.new([:array,"#{v}_tmp_y",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),type])]
-              jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","z"]),PointerOf.new([type,Expression.new([:array,"#{v}_tmp_z",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),type])]
+              stype = get_single_element_type(type)
+              jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","x"]),PointerOf.new([stype,Expression.new([:array,"#{v}_tmp_x",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),stype])]
+              jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","y"]),PointerOf.new([stype,Expression.new([:array,"#{v}_tmp_y",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),stype])]
+              jjloop.statements += [LoadState.new([Expression.new([:dot,"#{v}","z"]),PointerOf.new([stype,Expression.new([:array,"#{v}_tmp_z",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),stype])]
             else
               jjloop.statements += [LoadState.new(["#{v}",PointerOf.new([type,Expression.new([:array,"#{v}_tmp",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),type])]
             end
@@ -1163,9 +1168,10 @@ class Kernelprogram
             case modifier
             when "local"
               if type =~ /vec/
-                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"x"]),Expression.new([:array,"#{name}_tmp_x",jjj,type]),type])]
-                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"y"]),Expression.new([:array,"#{name}_tmp_y",jjj,type]),type])]
-                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"z"]),Expression.new([:array,"#{name}_tmp_z",jjj,type]),type])] 
+                stype = get_single_element_type(type)
+                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"x"]),Expression.new([:array,"#{name}_tmp_x",jjj,stype]),stype])]
+                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"y"]),Expression.new([:array,"#{name}_tmp_y",jjj,stype]),stype])]
+                jjloop.statements += [Duplicate.new([Expression.new([:dot,name,"z"]),Expression.new([:array,"#{name}_tmp_z",jjj,stype]),stype])]
               else
                 jjloop.statements += [Duplicate.new([name,Expression.new([:array,"#{name}_tmp",jjj,type]),type])]
               end
@@ -1185,9 +1191,10 @@ class Kernelprogram
         lsv[0].each{ |v|
           type = h[v][1]
           if type =~ /vec/
-            jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp_x",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","x"]),type])]
-            jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp_y",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","y"]),type])]
-            jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp_z",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","z"]),type])]
+            stype = get_single_element_type(type)
+            jjloop.statements += [StoreState.new([PointerOf.new([stype,Expression.new([:array,"#{v}_tmp_x",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","x"]),stype])]
+            jjloop.statements += [StoreState.new([PointerOf.new([stype,Expression.new([:array,"#{v}_tmp_y",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","y"]),stype])]
+            jjloop.statements += [StoreState.new([PointerOf.new([stype,Expression.new([:array,"#{v}_tmp_z",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),Expression.new([:dot,"#{v}","z"]),stype])]
           else
             jjloop.statements += [StoreState.new([PointerOf.new([type,Expression.new([:array,"#{v}_tmp",NonSimdExp.new([:mult,"#{nsimd}","jj","S32"])])]),"#{v}",type])]
           end

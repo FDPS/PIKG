@@ -220,6 +220,8 @@ class TableDecl
       ret += "};\n"
     when /A64FX/
       ret = convert_to_code_a64fx(conversion_type)
+    when /AVX2/
+      ret = convert_to_code_avx2(conversion_type)
     when /AVX-512/
       ret = convert_to_code_avx512(conversion_type)
     else
@@ -230,6 +232,10 @@ class TableDecl
 
   def get_related_variable
     []
+  end
+
+  def fusion_iotag
+    self
   end
 end
 
@@ -660,8 +666,8 @@ class FuncCall
       else
         abort "error: undefined reference to function #{@name}"
       end
+      abort "error: function returns vector variable is not supported: #{@name}" if ret_type =~ /vec/
     end
-    abort "error: function returns vector variable is not supported" if ret_type =~ /vec/
     abort "error: type inference failed for #{self}" if ret_type == nil
     ret_type
   end
@@ -960,7 +966,7 @@ class StoreState
         ret = "_mm256_storeu_#{get_type_suffix_avx2(@type)}(#{@dest.convert_to_code(conversion_type)},#{@src.convert_to_code(conversion_type)});"
       end
     when /AVX-512/
-      ret = "_mm512_store_#{get_type_suffix_avx512(@type)}(#{@dest.convert_to_code(conversion_type)},#{@src.convert_to_code(conversion_type)});"
+      ret = "_mm512_storeu_#{get_type_suffix_avx512(@type)}(#{@dest.convert_to_code(conversion_type)},#{@src.convert_to_code(conversion_type)});"
     else
       abort "unsupported conversion_type #{conversion_type} for StoreState"
     end
@@ -989,7 +995,7 @@ class LoadState
         ret = "#{@dest.convert_to_code(conversion_type)} = _mm256_loadu_#{get_type_suffix_avx512(type)}(#{@src.convert_to_code(conversion_type)});"
       end
     when /AVX-512/
-      ret = "#{@dest.convert_to_code(conversion_type)} = _mm512_load_#{get_type_suffix_avx512(type)}(#{@src.convert_to_code(conversion_type)});"
+      ret = "#{@dest.convert_to_code(conversion_type)} = _mm512_loadu_#{get_type_suffix_avx512(type)}(#{@src.convert_to_code(conversion_type)});"
     else
       abort "unsupported conversion_type #{conversion_type} for LoadState"
     end
@@ -1079,7 +1085,7 @@ class GatherLoad
       when 128
         ret += "_mm_load_si128((const __m128i*)#{index_name});\n"
       when 256
-        ret += "_mm256_load_si256((const __m256i*)#{index_name});\n"
+        ret += "_mm256_loadu_si256((const __m256i*)#{index_name});\n"
       end
       ret += "#{@dest.convert_to_code(conversion_type)} = _mm256_i32gather_#{get_type_suffix_avx2(@type)}(#{@src.convert_to_code(conversion_type)},#{vindex_name},#{scale});"
     when /AVX-512/
@@ -1096,7 +1102,7 @@ class GatherLoad
         end
       end
       ret += "alignas(#{size}) int#{size}_t #{index_name}[#{nelem}] = {#{index}};\n"
-      ret += "__m512i #{vindex_name} = _mm512_load_epi#{size}(#{index_name});\n"
+      ret += "__m512i #{vindex_name} = _mm512_loadu_epi#{size}(#{index_name});\n"
       ret += "#{@dest.convert_to_code(conversion_type)} = _mm512_i#{size}gather_#{get_type_suffix_avx512(@type)}(#{vindex_name},#{@src.convert_to_code(conversion_type)},#{scale});"
     else
       abort "unsupported conversion type #{conversion_type} for GatherLoad"
@@ -1171,7 +1177,7 @@ class ScatterStore
         end
       end
       ret += "int#{size}_t #{index_name}[#{nelem}] = {#{index}};\n"
-      ret += "__m512i #{vindex_name} = _mm512_load_epi#{size}(#{index_name});\n"
+      ret += "__m512i #{vindex_name} = _mm512_loadu_epi#{size}(#{index_name});\n"
       ret += "_mm512_i#{size}scatter_#{get_type_suffix_avx512(@type)}(#{@dest.convert_to_code(conversion_type)},#{vindex_name},#{@src.convert_to_code(conversion_type)},#{scale});\n"
     else
       abort "unsupported conversion type #{conversion_type} for ScatterStore"
