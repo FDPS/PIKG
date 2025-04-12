@@ -51,8 +51,12 @@ class Kernelprogram
       iotype = h[v][0]
       if iotype == "EPI"
         type = h[v][1]
-        fdpsname = h[v][2]
         modifier = h[v][3]
+        if modifier == "local"
+          fdpsname = v
+        else
+          fdpsname = h[v][2]
+        end
         code += Declaration.new([type,fdpsname]).convert_to_code(conversion_type)
       end
     }
@@ -62,8 +66,12 @@ class Kernelprogram
       iotype = h[v][0]
       if iotype == "EPJ"
         type = h[v][1]
-        fdpsname = h[v][2]
         modifier = h[v][3]
+        if modifier == "local"
+          fdpsname = v
+        else
+          fdpsname = h[v][2]
+        end
         code += Declaration.new([type,fdpsname]).convert_to_code(conversion_type)
       end
     }
@@ -73,8 +81,12 @@ class Kernelprogram
       iotype = h[v][0]
       if iotype == "FORCE"
         type = h[v][1]
-        fdpsname = h[v][2]
         modifier = h[v][3]
+        if modifier == "local"
+          fdpsname = v
+        else
+          fdpsname = h[v][2]
+        end
         code += Declaration.new([type,fdpsname]).convert_to_code(conversion_type)
       end
     }
@@ -156,8 +168,12 @@ class Kernelprogram
         index = ["EPI","EPJ","FORCE"].index(iotype)
         if index
           type = h[v][1]
-          fdpsname = h[v][2]
           modifier = h[v][3]
+          if modifier == "local"
+            fdpsname = v
+          else
+            fdpsname = h[v][2]
+          end
           replaced = ["epi","epj","force"][index] + "." + fdpsname
           if isStatement(tmp_s)
             name = tmp_s.name.replace_recursive(v,replaced)
@@ -413,8 +429,12 @@ class Kernelprogram
       iotype = h[v][0]
       if iotype == "EPI"
         type = h[v][1]
-        fdpsname = h[v][2]
         modifier = h[v][3]
+        if modifier == "local"
+          fdpsname = v
+        else
+          fdpsname = h[v][2]
+        end
         get_vector_elements(type).each{|dim|
           if dim == ""
             code += "      " + Statement.new(["dev_epi[ni_tot]."+fdpsname,"epi[iw][i]."+fdpsname,type]).convert_to_code("reference") + "\n"
@@ -433,8 +453,12 @@ class Kernelprogram
       iotype = h[v][0]
       if iotype == "EPJ"
         type = h[v][1]
-        fdpsname = h[v][2]
         modifier = h[v][3]
+        if modifier == "local"
+          fdpsname = v
+        else
+          fdpsname = h[v][2]
+        end
         get_vector_elements(type).each{|dim|
           if dim == ""
             code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname,"epj[iw][j]."+fdpsname,type]).convert_to_code("reference") + "\n"
@@ -453,8 +477,12 @@ class Kernelprogram
         iotype = h[v][0]
         if iotype == "EPJ"
           type = h[v][1]
-          fdpsname = h[v][2]
           modifier = h[v][3]
+          if modifier == "local"
+            fdpsname = v
+          else
+            fdpsname = h[v][2]
+          end
           get_vector_elements(type).each{|dim|
             if dim == ""
               code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname,"spj[iw][j]."+fdpsname,type]).convert_to_code("reference") + "\n"
@@ -517,8 +545,12 @@ class Kernelprogram
       iotype = h[v][0]
       if iotype == "FORCE"
         type = h[v][1]
-        fdpsname = h[v][2]
         modifier = h[v][3]
+        if modifier == "local"
+          fdpsname = v
+        else
+          fdpsname = h[v][2]
+        end
         type_single = get_single_element_type(type)
         get_vector_elements(type).zip($accumhash[v]){ |dim,op|
           dest = "force[iw][i]." + fdpsname

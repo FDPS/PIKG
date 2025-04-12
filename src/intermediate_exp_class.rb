@@ -209,13 +209,17 @@ class TableDecl
     end
   end
 
+  def replace_recursive(orig,replaced)
+    return self
+  end
+
   def convert_to_code(conversion_type="reference")
     case conversion_type
-    when "reference"
-      ret = "PIKG::#{@type} #{@name}[] = {"
+    when /(reference|CUDA)/
+      ret = "#{get_declare_type(@type,conversion_type)} #{@name}[] = {"
       @table.vals.each_with_index{ |v,i|
         ret += "," if i != 0
-        ret += v.convert_to_code("reference")
+        ret += v.convert_to_code(conversion_type)
       }
       ret += "};\n"
     when /A64FX/
@@ -224,6 +228,8 @@ class TableDecl
       ret = convert_to_code_avx2(conversion_type)
     when /AVX-512/
       ret = convert_to_code_avx512(conversion_type)
+    else
+      abort "unsupported conversion_type #{conversion_type} for TableDecl"
     end
     ret
   end
@@ -258,7 +264,7 @@ class FloatingPoint
     self
   end
 
-  def replace_fdpsname_recursive(h=$varhash)
+  def replace_fdpsname_recursive(h=$varhash,multiwalk=false)
     self
   end
   def replace_recursive(orig,replaced)
@@ -288,7 +294,7 @@ class FloatingPoint
 
   def convert_to_code(conversion_type="reference")
     case conversion_type
-    when "reference"
+    when /(reference|CUDA)/
       @val
     when /A64FX/
       convert_to_code_a64fx(conversion_type)
@@ -296,6 +302,8 @@ class FloatingPoint
       convert_to_code_avx2(conversion_type)
     when /AVX-512/
       convert_to_code_avx512(conversion_type)
+    else
+      abort "unsupported conversion_type #{conversion_type} for FloatinPoint"
     end
   end
 end
@@ -329,7 +337,7 @@ class IntegerValue
   def replace_recursive(orig,replaced)
     self.dup
   end
-  def replace_fdpsname_recursive(h=$varhash)
+  def replace_fdpsname_recursive(h=$varhash,multiwalk=false)
     self.dup
   end
 
@@ -370,6 +378,8 @@ class IntegerValue
       convert_to_code_avx2(conversion_type)
     when /AVX-512/
       convert_to_code_avx512(conversion_type)
+    else
+      abort "unsupported conversion_type #{conversion_type} for IntegerValue"
     end
   end
 end
@@ -660,8 +670,8 @@ class FuncCall
       else
         abort "error: undefined reference to function #{@name}"
       end
+      abort "error: function returns vector variable is not supported: #{@name}" if ret_type =~ /vec/
     end
-    abort "error: function returns vector variable is not supported" if ret_type =~ /vec/
     abort "error: type inference failed for #{self}" if ret_type == nil
     ret_type
   end
@@ -713,10 +723,10 @@ class FuncCall
     FuncCall.new([@name,ops,@type])
   end
 
-  def replace_fdpsname_recursive(h=$varhash)
+  def replace_fdpsname_recursive(h=$varhash,multiwalk=false)
     ops = Array.new
     @ops.each{ |op|
-      ops.push(op.replace_fdpsname_recursive(h))
+      ops.push(op.replace_fdpsname_recursive(h,multiwalk))
     }
     FuncCall.new([@name,ops,@type])
   end
@@ -750,8 +760,10 @@ class FuncCall
       retval = self.convert_to_code_avx2(conversion_type)
     when /AVX-512/
       retval = self.convert_to_code_avx512(conversion_type)
+    when /CUDA/
+      retval = self.convert_to_code("reference")
     else
-      abort "error: unsupported conversion_type #{conversion_type}"
+      abort "error: unsupported conversion_type #{conversion_type} for FuncCall"
     end
     retval
   end
@@ -769,6 +781,10 @@ class Pragma
 
   def declare_temporal_var
     []
+  end
+
+  def replace_recursive(orig,replaced)
+    return self
   end
 
   def convert_to_code(conversion_type="reference")
@@ -801,7 +817,7 @@ class IfElseState
   def convert_to_code(conversion_type="reference")
     ret = ""
     case conversion_type
-    when "reference"
+    when /(reference|CUDA)/
       case @operator
       when :if
         ret = "if(" + @expression.convert_to_code(conversion_type) + "){"
@@ -930,7 +946,7 @@ class IfElseState
         abort "undefined operator of IfElseState: #{@operator}"
       end
     else
-      abort "error: unsupported conversion_type #{conversion_type}"
+      abort "error: unsupported conversion_type #{conversion_type} for IfElseState"
     end
     ret
   end
@@ -959,6 +975,8 @@ class StoreState
       end
     when /AVX-512/
       ret = "_mm512_storeu_#{get_type_suffix_avx512(@type)}(#{@dest.convert_to_code(conversion_type)},#{@src.convert_to_code(conversion_type)});"
+    else
+      abort "unsupported conversion_type #{conversion_type} for StoreState"
     end
   end
 end
@@ -986,6 +1004,8 @@ class LoadState
       end
     when /AVX-512/
       ret = "#{@dest.convert_to_code(conversion_type)} = _mm512_loadu_#{get_type_suffix_avx512(type)}(#{@src.convert_to_code(conversion_type)});"
+    else
+      abort "unsupported conversion_type #{conversion_type} for LoadState"
     end
   end
 end
@@ -1025,6 +1045,8 @@ class PointerOf
       ret = @exp.convert_to_code(conversion_type)
     when /(A64FX|AVX2|AVX-512)/
       ret = "((#{get_pointer_type(@type)})&#{@exp.convert_to_code("reference")})"
+    else
+      abort "unsupported conversion_type #{conversion_type} for PointerOf"
     end
     ret
   end
@@ -1091,7 +1113,7 @@ class GatherLoad
       ret += "__m512i #{vindex_name} = _mm512_loadu_epi#{size}(#{index_name});\n"
       ret += "#{@dest.convert_to_code(conversion_type)} = _mm512_i#{size}gather_#{get_type_suffix_avx512(@type)}(#{vindex_name},#{@src.convert_to_code(conversion_type)},#{scale});"
     else
-      abort "unsupported conversion type for GatherLoad"
+      abort "unsupported conversion type #{conversion_type} for GatherLoad"
     end
     $gather_load_count += 1
     ret
@@ -1166,7 +1188,7 @@ class ScatterStore
       ret += "__m512i #{vindex_name} = _mm512_loadu_epi#{size}(#{index_name});\n"
       ret += "_mm512_i#{size}scatter_#{get_type_suffix_avx512(@type)}(#{@dest.convert_to_code(conversion_type)},#{vindex_name},#{@src.convert_to_code(conversion_type)},#{scale});\n"
     else
-      abort "unsupported conversion type for ScatterStore"
+      abort "unsupported conversion type #{conversion_type} for ScatterStore"
     end
     $scatter_store_count += 1
     ret
@@ -1291,6 +1313,8 @@ class Duplicate
       ret = "#{@name.convert_to_code(conversion_type)} = _mm256_set1_#{get_type_suffix_avx2(@type)}#{set1_suffix}(#{@expression.convert_to_code(conversion_type)});"
     when /AVX-512/
       ret = "#{@name.convert_to_code(conversion_type)} = _mm512_set1_#{get_type_suffix_avx512(@type)}(#{@expression.convert_to_code(conversion_type)});"
+    else
+      abort "unsupported conversion_type #{conversion_type} for Duplicate"
     end
     ret
   end
@@ -1350,10 +1374,10 @@ class MADD
     MADD.new([@operator,aop,bop,cop,@type])
   end
 
-  def replace_fdpsname_recursive(h=$varhash)
-    aop = @aop.replace_fdpsname_recursive(h)
-    bop = @bop.replace_fdpsname_recursive(h)
-    cop = @cop.replace_fdpsname_recursive(h)
+  def replace_fdpsname_recursive(h=$varhash,multiwalk=false)
+    aop = @aop.replace_fdpsname_recursive(h,multiwalk)
+    bop = @bop.replace_fdpsname_recursive(h,multiwalk)
+    cop = @cop.replace_fdpsname_recursive(h,multiwalk)
     MADD.new([@operator,aop,bop,cop,@type])
   end
 
@@ -1371,7 +1395,7 @@ class MADD
   def convert_to_code(conversion_type="reference")
     retval=""
     case conversion_type
-    when "reference" then
+    when /(reference|CUDA)/ then
       case @operator
       when :madd then
       #retval = "std::fma(#{@aop.convert_to_code(conversion_type)},#{@bop.convert_to_code(conversion_type)},#{@cop.convert_to_code(conversion_type)})"
@@ -1446,6 +1470,8 @@ class MADD
       retval += @aop.convert_to_code(conversion_type) + ","
       retval += @bop.convert_to_code(conversion_type) + ","
       retval += @cop.convert_to_code(conversion_type) + ")"
+    else
+      abort "unsupported conversion_type #{conversion_type} for MADD"
     end
     retval
   end
@@ -1493,6 +1519,10 @@ class Merge
       predicate = $current_predicate
       predicate += "_#{@split_index}" if @split_index != nil
      ret = "_mm512_mask_blend_#{get_type_suffix_avx512(@type)}(#{predicate},#{@op2.convert_to_code(conversion_type)},#{@op1.convert_to_code(conversion_type)});" # inactive elements come from first input
+    when /CUDA/
+      ret = convert_to_code("reference")
+    else
+      abort "unsupported conversion_type #{conversion_type} for Merge"
     end
     ret
   end
@@ -1731,7 +1761,7 @@ class Expression
     end
     Expression.new([@operator,lop,rop,type])
   end
-  def replace_fdpsname_recursive(h=$varhash)
+  def replace_fdpsname_recursive(h=$varhash,multiwalk=false)
     #p self
     ret = self.dup
     if @operator == :array
@@ -1740,12 +1770,16 @@ class Expression
       type   = h[name][1]
       fdpsname = h[name][2]
       abort "array expression must be used for EPI, EPJ, or FORCE variable" if fdpsname == nil || iotype == nil
-      ret = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),ret.rop]),fdpsname,type])
+      if multiwalk
+        ret = Expression.new([:dot,Expression.new([:array,Expression.new([:array,get_iotype_array(iotype),"iw"]),ret.rop]),fdpsname,type])
+      else
+        ret = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),ret.rop]),fdpsname,type])
+      end
     elsif @operator == :dot
-      ret.lop = ret.lop.replace_fdpsname_recursive(h)
+      ret.lop = ret.lop.replace_fdpsname_recursive(h,multiwalk)
     else
-      ret.lop = ret.lop.replace_fdpsname_recursive(h)
-      ret.rop = ret.rop.replace_fdpsname_recursive(h) if ret.rop != nil
+      ret.lop = ret.lop.replace_fdpsname_recursive(h,multiwalk)
+      ret.rop = ret.rop.replace_fdpsname_recursive(h,multiwalk) if ret.rop != nil
     end
     ret
   end
@@ -1788,6 +1822,10 @@ class Expression
       retval = self.convert_to_code_avx2(conversion_type)
     when /AVX-512/
       retval = self.convert_to_code_avx512(conversion_type)
+    when /CUDA/
+      retval = self.convert_to_code("reference")
+    else
+      abort "unsupported conversion_type #{conversion_type} for Expression"
     end
     retval
   end
@@ -1849,7 +1887,7 @@ class Fusion
         abort "Fusion #{n} for AVX2 under construction"
       end
     else
-      abort "unsupported conversion_type #{coversion_type} for Fusion"
+      abort "unsupported conversion_type #{conversion_type} for Fusion"
     end
     ret
   end
