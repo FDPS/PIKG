@@ -39,6 +39,7 @@ class Kernelprogram
     
     code = String.new
 
+    code += "#include <cuda/std/limits>\n"
     code += "#include \"#{$epi_file}\"\n"
     code += "#include \"#{$epj_file}\"\n" if $epj_file != $epi_file
     code += "#include \"#{$force_file}\"\n" if ($force_file != $epi_file) && ($force_file != $epj_file)
@@ -337,7 +338,7 @@ class Kernelprogram
           dest = Expression.new([:dot,dest,dim,type_single]) if dim != ""
           op = $accumhash[v][j]
           abort "accum_hash == nil" if $accumhash[v][j] == nil
-          code += "    " + Duplicate.new([dest,get_initial_value(op,type_single),type_single]).convert_to_code("reference") + "\n"
+          code += "    " + Duplicate.new([dest,get_initial_value(op,type_single,conversion_type),type_single]).convert_to_code("reference") + "\n"
         }
       end
     }
