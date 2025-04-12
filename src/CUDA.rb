@@ -178,36 +178,10 @@ class Kernelprogram
     new_s = Array.new
 
     @statements.each{ |s|
+      code += s.convert_to_code(conversion_type) + "\n" if s.class == TableDecl
       next if s.class == Pragma or s.class == TableDecl
       next if s.class == Statement and h[get_name(s)][3] == "local"
       new_s.push(s)
-    }
-
-    @statements.each{ |s|
-      tmp_s = s
-      fvars.each{ |v|
-        iotype = h[v][0]
-        index = ["EPI","EPJ","FORCE"].index(iotype)
-        if index
-          type = h[v][1]
-          modifier = h[v][3]
-          if modifier == "local"
-            fdpsname = v
-          else
-            fdpsname = h[v][2]
-          end
-          replaced = ["epi","epj","force"][index] + "." + fdpsname
-          if isStatement(tmp_s)
-            name = tmp_s.name.replace_recursive(v,replaced)
-            exp  = tmp_s.expression.replace_recursive(v,replaced)
-            tmp_s = Statement.new([name,exp,s.type,s.op])
-          else
-            tmp_s.replace_recursive(v,replaced)
-          end
-        end
-      }
-      new_s.push(tmp_s)
-      code += s.convert_to_code(conversion_type) + "\n" if s.class == TableDecl
     }
 
     generate_jloop_body(new_s,fvars,split_vars,conversion_type).each{ |s|
