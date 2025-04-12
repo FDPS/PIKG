@@ -355,7 +355,6 @@ class Kernelprogram
         ret.name = ret.name.split("vec")[0]
         ops = []
         ret.ops.each{ |op|
-          #ops.push(op + "." + dim)
           ops.push(Expression.new([:dot,op,dim]))
         }
         ret.ops = ops
@@ -1498,7 +1497,7 @@ class String
       self
     end
   end
-  def replace_fdpsname_recursive(h=$varhash)
+  def replace_fdpsname_recursive(h=$varhash,multiwalk=false)
     name = self.dup
     ret = name
     return ret if h[name] == nil
@@ -1508,7 +1507,11 @@ class String
     if iotype != nil && fdpsname != nil
       op = "i" if iotype == "EPI" || iotype == "FORCE"
       op = "j" if iotype == "EPJ"
-      ret = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),op]),fdpsname,type])
+      if multiwalk
+        ret = Expression.new([:dot,Expression.new([:array,Expression.new([:array,get_iotype_array(iotype),"iw"]),op]),fdpsname,type])
+      else
+        ret = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),op]),fdpsname,type])
+      end
     end
     ret
   end
