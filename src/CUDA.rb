@@ -1,4 +1,60 @@
 class Kernelprogram
+  def reserved_func_def_cuda(conversion_type)
+    abort if conversion_type != "CUDA"
+    code = ""
+    # code += "template<typename Tret,typename Top>\n"
+    # code += "Tret rsqrt(Top op){ return (Tret)1.0/std::sqrt(op); }\n"
+    # code += "template<typename Tret,typename Top>\n"
+    # code += "Tret sqrt(Top op){ return std::sqrt(op); }\n"
+    # code += "template<typename Tret,typename Top>\n"
+    # code += "Tret inv(Top op){ return 1.0/op; }\n"
+    # code += "template<typename Tret,typename Ta,typename Tb>\n"
+    # code += "Tret max(Ta a,Tb b){ return std::max(a,b);}\n"
+    # code += "template<typename Tret,typename Ta,typename Tb>\n"
+    # code += "Tret min(Ta a,Tb b){ return std::min(a,b);}\n"
+    # code += "PIKG::F64 rsqrt(PIKG::F64 op){ return 1.0/std::sqrt(op); }\n" # rsqrt is supported
+    # code += "PIKG::F64 sqrt(PIKG::F64 op){ return std::sqrt(op); }\n"
+    code += "__device__ PIKG::F64 inv(PIKG::F64 op){ return 1.0/op; }\n"
+    #code += "PIKG::F64 max(PIKG::F64 a,PIKG::F64 b){ return std::max(a,b);}\n"
+    #code += "PIKG::F64 min(PIKG::F64 a,PIKG::F64 b){ return std::min(a,b);}\n"
+
+    #code += "PIKG::F32 rsqrt(PIKG::F32 op){ return 1.f/std::sqrt(op); }\n"
+    #code += "PIKG::F32 sqrt(PIKG::F32 op){ return std::sqrt(op); }\n"
+    code += "__device__ PIKG::F32 inv(PIKG::F32 op){ return 1.f/op; }\n"
+
+    #code += "PIKG::S64 max(PIKG::S64 a,PIKG::S64 b){ return std::max(a,b);}\n"
+    #code += "PIKG::S64 min(PIKG::S64 a,PIKG::S64 b){ return std::min(a,b);}\n"
+    #code += "PIKG::S32 max(PIKG::S32 a,PIKG::S32 b){ return std::max(a,b);}\n"
+    #code += "PIKG::S32 min(PIKG::S32 a,PIKG::S32 b){ return std::min(a,b);}\n"
+
+    code += "__device__ PIKG::F64 table(PIKG::F64 tab[],PIKG::S64 i){ return tab[i]; }\n"
+    code += "__device__ PIKG::F32 table(PIKG::F32 tab[],PIKG::S32 i){ return tab[i]; }\n"
+
+    code += "__device__ PIKG::F64 to_float(PIKG::U64 op){return (PIKG::F64)op;}\n"
+    code += "__device__ PIKG::F32 to_float(PIKG::U32 op){return (PIKG::F32)op;}\n"
+    code += "__device__ PIKG::F64 to_float(PIKG::S64 op){return (PIKG::F64)op;}\n"
+    code += "__device__ PIKG::F32 to_float(PIKG::S32 op){return (PIKG::F32)op;}\n"
+    code += "__device__ PIKG::S64   to_int(PIKG::F64 op){return (PIKG::S64)op;}\n"
+    code += "__device__ PIKG::S32   to_int(PIKG::F32 op){return (PIKG::S32)op;}\n"
+    code += "__device__ PIKG::U64  to_uint(PIKG::F64 op){return (PIKG::U64)op;}\n"
+    code += "__device__ PIKG::U32  to_uint(PIKG::F32 op){return (PIKG::U32)op;}\n"
+
+
+    code += "template<typename T> __device__ PIKG::F64 to_f64(const T& op){return (PIKG::F64)op;}\n"
+    code += "template<typename T> __device__ PIKG::F32 to_f32(const T& op){return (PIKG::F32)op;}\n"
+    #code += "template<typename T> PIKG::F16 to_f16(const T& op){return (PIKG::F16)op;}\n"
+    code += "template<typename T> __device__ PIKG::S64 to_s64(const T& op){return (PIKG::S64)op;}\n"
+    code += "template<typename T> __device__ PIKG::S32 to_s32(const T& op){return (PIKG::S32)op;}\n"
+    #code += "template<typename T> PIKG::S16 to_s16(const T& op){return (PIKG::S16)op;}\n"
+    code += "template<typename T> __device__ PIKG::U64 to_u64(const T& op){return (PIKG::U64)op;}\n"
+    code += "template<typename T> __device__ PIKG::U32 to_u32(const T& op){return (PIKG::U32)op;}\n"
+    #code += "template<typename T> PIKG::U16 to_u16(const T& op){return (PIKG::U16)op;}\n"
+
+    #code += "PIKG::F64 table(const PIKG::F64 tab[],const PIKG::U32 index){ return tab[index];);\n"
+    #code += "PIKG::F32 table(const PIKG::F32 tab[],const PIKG::U32 index){ return tab[index];);\n"
+    code
+  end
+
   def generate_optimized_cuda_kernel(conversion_type,h = $varhash)
     abort "error: --class-file option must be specified for conversion_type CUDA" if $epi_file == nil
     
@@ -94,7 +150,7 @@ class Kernelprogram
         member_decls += get_declare_type(type,conversion_type) + " " + name
       end
     }
-
+    code += reserved_func_def_cuda(conversion_type)
     code += "inline __device__ ForceGPU inner_kernel(\n"
     code += "				     EpiGPU epi,\n"
     code += "				     EpjGPU epj,\n"
@@ -128,9 +184,13 @@ class Kernelprogram
           fdpsname = h[v][2]
           modifier = h[v][3]
           replaced = ["epi","epj","force"][index] + "." + fdpsname
-          name = tmp_s.name.replace_recursive(v,replaced)
-          exp  = tmp_s.expression.replace_recursive(v,replaced)
-          tmp_s = Statement.new([name,exp,s.type,s.op])
+          if isStatement(tmp_s)
+            name = tmp_s.name.replace_recursive(v,replaced)
+            exp  = tmp_s.expression.replace_recursive(v,replaced)
+            tmp_s = Statement.new([name,exp,s.type,s.op])
+          else
+            tmp_s.replace_recursive(v,replaced)
+          end
         end
       }
       new_s.push(tmp_s)
