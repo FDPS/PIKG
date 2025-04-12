@@ -45,9 +45,6 @@ class Kernelprogram
     code += "#include \"pikg_cuda_pointer.hpp\"\n"
     code += "#include \"pikg_vector.hpp\"\n"
 
-    code += "__device__ float  table(float  tab[],int i){ return tab[i]; }\n"
-    code += "__device__ double table(double tab[],int i){ return tab[i]; }\n"
-
     fvars = generate_force_related_map(@statements)
     # GPU class definition
     code += "struct EpiGPU{\n"
