@@ -479,16 +479,23 @@ class Kernelprogram
         modifier = h[v][3]
         if modifier == "local"
           fdpsname = v
+          @statements.each{ |s|
+            if get_name(s) == v
+              new_name = "dev_epi[ni_tot]."+fdpsname
+              new_exp = s.expression.replace_fdpsname_recursive(h,true)
+              code += "      " + Statement.new([new_name, new_exp,type]).convert_to_code("reference") + "\n"
+            end
+          }
         else
           fdpsname = h[v][2]
+          get_vector_elements(type).each{|dim|
+            if dim == ""
+              code += "      " + Statement.new(["dev_epi[ni_tot]."+fdpsname,"epi[iw][i]."+fdpsname,type]).convert_to_code("reference") + "\n"
+            else
+              code += "      " + Statement.new(["dev_epi[ni_tot]."+fdpsname+"."+dim,"epi[iw][i]."+fdpsname+"."+dim,type]).convert_to_code("reference") + "\n"
+            end
+          }
         end
-        get_vector_elements(type).each{|dim|
-          if dim == ""
-            code += "      " + Statement.new(["dev_epi[ni_tot]."+fdpsname,"epi[iw][i]."+fdpsname,type]).convert_to_code("reference") + "\n"
-          else
-            code += "      " + Statement.new(["dev_epi[ni_tot]."+fdpsname+"."+dim,"epi[iw][i]."+fdpsname+"."+dim,type]).convert_to_code("reference") + "\n"
-          end
-        }
       end
     }
     code += "      walk[ni_tot] = iw;\n"
@@ -504,16 +511,23 @@ class Kernelprogram
         modifier = h[v][3]
         if modifier == "local"
           fdpsname = v
+          @statements.each{ |s|
+            if get_name(s) == v
+              new_name = "dev_epj[nj_tot]."+fdpsname
+              new_exp = s.expression.replace_fdpsname_recursive(h,true)
+              code += "      " + Statement.new([new_name, new_exp,type]).convert_to_code("reference") + "\n"
+            end
+          }
         else
           fdpsname = h[v][2]
+          get_vector_elements(type).each{|dim|
+            if dim == ""
+              code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname,"epj[iw][j]."+fdpsname,type]).convert_to_code("reference") + "\n"
+            else
+              code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname+"."+dim,"epj[iw][j]."+fdpsname+"."+dim,type]).convert_to_code("reference") + "\n"
+            end
+          }
         end
-        get_vector_elements(type).each{|dim|
-          if dim == ""
-            code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname,"epj[iw][j]."+fdpsname,type]).convert_to_code("reference") + "\n"
-          else
-            code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname+"."+dim,"epj[iw][j]."+fdpsname+"."+dim,type]).convert_to_code("reference") + "\n"
-          end
-        }
       end
     }
     code += "      nj_tot++;\n"
