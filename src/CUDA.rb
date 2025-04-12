@@ -481,7 +481,9 @@ class Kernelprogram
           fdpsname = v
           @statements.each{ |s|
             if get_name(s) == v
+              dim = get_tail(s)
               new_name = "dev_epi[ni_tot]."+fdpsname
+              new_name = new_name + "." + dim if dim != nil
               new_exp = s.expression.replace_fdpsname_recursive(h,true)
               code += "      " + Statement.new([new_name, new_exp,type]).convert_to_code("reference") + "\n"
             end
@@ -513,7 +515,9 @@ class Kernelprogram
           fdpsname = v
           @statements.each{ |s|
             if get_name(s) == v
+              dim = get_tail(s)
               new_name = "dev_epj[nj_tot]."+fdpsname
+              new_name = new_name + "." + dim if dim != nil
               new_exp = s.expression.replace_fdpsname_recursive(h,true)
               code += "      " + Statement.new([new_name, new_exp,type]).convert_to_code("reference") + "\n"
             end
