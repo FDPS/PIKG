@@ -1658,6 +1658,20 @@ while true
 end
 #abort "output file must be specified with --output option" if $output_file == nil
 
+# check conversion_type is supported
+supported_conversion_type = ["AVX2","AVX-512","ARM_SVE","CUDA"]
+if not supported_conversion_type.any? { |item| item == $conversion_type}
+  if $conversion_type == "AVX512"
+    p "The conversion_type #{$conversion_type} may be typo of AVX-512. Continue with AVX-512"
+    $conversion_type = "AVX-512"
+  #elsif $conversion_type == "A64FX"
+  #  p "The conversion_type #{$conversion_type} is deperecated. Continue with ARM_SVE"
+  #  $conversion_type = "ARM_SVE"
+  else
+    abort "Error: unsupported conversion_type #{$conversion_type}"
+  end
+end
+
 if $c_interface
   $c_interface_impl = true
   $c_interface_decl = true
