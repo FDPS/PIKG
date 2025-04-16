@@ -65,7 +65,7 @@ class Kernelprogram
     # constant definition
     code += "enum{\n"
     code += "  N_THREAD_GPU = 32,\n"
-    code += "  N_WALK_LIMIT = 1000,\n"
+    code += "  N_WALK_LIMIT = 4096,\n"
     code += "  NI_LIMIT     = N_WALK_LIMIT*1000,\n"
     code += "  NJ_LIMIT     = N_WALK_LIMIT*10000,\n"
     code += "};\n"
@@ -146,7 +146,7 @@ class Kernelprogram
     }
 
     @statements.each{ |s|
-      code += s.convert_to_code(conversion_type) + "\n" if s.class == TableDecl
+      code += "__constant__ " + s.convert_to_code(conversion_type) + "\n" if s.class == TableDecl
     }
 
     generate_jloop_body(new_s,fvars,split_vars,conversion_type).each{ |s|
@@ -279,6 +279,109 @@ class Kernelprogram
     code += "  return accp;\n"
     code += "}\n"
 
+    code += "__device__ ForceGPU ForceKernel_1walk_index(\n"
+    code += "				    EpjGPU *jpsh,\n"
+    code += "				    const EpiGPU ipos,\n"
+    code += "				    const int     id_walk,\n"
+    code += "				    const int    *ij_disp,\n"
+    code += "				    const EpjGPU *epj, \n"
+    code += "				    const int    *id_epj,\n"
+    code += "				    ForceGPU accp"
+    code += member_decls
+    code += "){\n"
+    code += "  const int tid = threadIdx.x;\n"
+    code += "  const int j_head = ij_disp[id_walk  ];\n"
+    code += "  const int j_tail = ij_disp[id_walk+1];\n"
+    code += "  for(int j=j_head; j<j_tail; j+=N_THREAD_GPU){\n"
+    code += "    jpsh[tid] = epj[id_epj[j+tid]];\n"
+    code += "    if(j_tail-j < N_THREAD_GPU){\n"
+    code += "      for(int jj=0; jj<j_tail-j; jj++){\n"
+    code += "        accp = inner_kernel( ipos, jpsh[jj], accp#{member_vars});\n"
+    code += "      }\n"
+    code += "    }else{\n"
+    code += "#pragma unroll 32\n"
+    code += "      for(int jj=0; jj<N_THREAD_GPU; jj++){\n"
+    code += "        accp = inner_kernel( ipos, jpsh[jj], accp#{member_vars});\n"
+    code += "      }\n"
+    code += "    }\n"
+    code += "  }\n"
+    code += "  return accp;\n"
+    code += "}\n"
+    code += "__device__ ForceGPU ForceKernel_2walk_index(\n"
+    code += "				    EpjGPU jpsh[2][N_THREAD_GPU],\n"
+    code += "				    const EpiGPU  ipos,\n"
+    code += "				    const int     id_walk,\n"
+    code += "				    const int     iwalk0,\n"
+    code += "				    const int     iwalk1,\n"
+    code += "				    const int    *ij_disp,\n"
+    code += "				    const EpjGPU *epj, \n"
+    code += "				    const int    *id_epj,\n"
+    code += "				    ForceGPU accp"
+    code += member_decls
+    code += "){\n"
+    code += "  const int jbeg0 = ij_disp[iwalk0];\n"
+    code += "  const int jbeg1 = ij_disp[iwalk1];\n"
+    code += "  const int jend0 = ij_disp[iwalk0 + 1];\n"
+    code += "  const int jend1 = ij_disp[iwalk1 + 1];\n"
+    code += "  const int nj0   = jend0 - jbeg0;\n"
+    code += "  const int nj1   = jend1 - jbeg1;\n"
+    code += "  const int nj_longer  = nj0 > nj1 ? nj0 : nj1;\n"
+    code += "  const int nj_shorter = nj0 > nj1 ? nj1 : nj0;\n"
+    code += "  const int walk_longer= nj0 > nj1 ? 0 : 1;\n"
+    code += "  const int jbeg_longer = nj0 > nj1 ? jbeg0 : jbeg1;\n"
+    code += "  const int mywalk = id_walk==iwalk0 ? 0 : 1;\n"
+    code += "  const int tid = threadIdx.x;\n"
+    code += "  for(int j=0; j<nj_shorter; j+=N_THREAD_GPU){\n"
+    code += "    jpsh[0][tid] = epj[id_epj[jbeg0 + j + tid]];\n"
+    code += "    jpsh[1][tid] = epj[id_epj[jbeg1 + j + tid]];\n"
+    code += "    if(nj_shorter-j < N_THREAD_GPU){\n"
+    code += "      for(int jj=0; jj<nj_shorter-j; jj++){\n"
+    code += "        accp = inner_kernel( ipos, jpsh[mywalk][jj], accp#{member_vars});\n"
+    code += "      }\n"
+    code += "    }else{\n"
+    code += "#pragma unroll 32\n"
+    code += "      for(int jj=0; jj<N_THREAD_GPU; jj++){\n"
+    code += "        accp = inner_kernel( ipos, jpsh[mywalk][jj], accp#{member_vars});\n"
+    code += "      }\n"
+    code += "    }\n"
+    code += "  }\n"
+    code += "  for(int j=nj_shorter; j<nj_longer; j+=N_THREAD_GPU){\n"
+    code += "    jpsh[0][tid] = epj[id_epj[jbeg_longer + j + tid]];\n"
+    code += "    int jrem = nj_longer - j;\n"
+    code += "    if(jrem < N_THREAD_GPU){\n"
+    code += "      for(int jj=0; jj<jrem; jj++){\n"
+    code += "	     if(mywalk == walk_longer)\n"
+    code += "          accp = inner_kernel( ipos, jpsh[0][jj], accp#{member_vars});\n"
+    code += "      }\n"
+    code += "    }else{\n"
+    code += "#pragma unroll 32\n"
+    code += "      for(int jj=0; jj<N_THREAD_GPU; jj++){\n"
+    code += "	     if(mywalk == walk_longer)\n"
+    code += "          accp = inner_kernel( ipos, jpsh[0][jj], accp#{member_vars});\n"
+    code += "      }\n"
+    code += "    }\n"
+    code += "  }\n"
+    code += "  return accp;\n"
+    code += "}\n"
+    code += "__device__ ForceGPU ForceKernel_multiwalk_index(\n"
+    code += "					const EpiGPU ipos,\n"
+    code += "					const int     id_walk,\n"
+    code += "					const int    *ij_disp,\n"
+    code += "					const EpjGPU *epj, \n"
+    code += "					const int    *id_epj,\n"
+    code += "					ForceGPU accp"
+    code += member_decls
+    code += "){\n"
+    code += "  const int j_head = ij_disp[id_walk  ];\n"
+    code += "  const int j_tail = ij_disp[id_walk+1];\n"
+    code += "\n"
+    code += "  for(int j=j_head; j<j_tail; j++){\n"
+    code += "    EpjGPU jp = epj[id_epj[j]];\n"
+    code += "    accp = inner_kernel( ipos, jp, accp#{member_vars});\n"
+    code += "  }\n"
+    code += "  return accp;\n"
+    code += "}\n"
+
     code += "__global__ void #{$kernel_name}_cuda(\n"
     code += "                  const int    * ij_disp,\n"
     code += "                  const int    * walk,\n"
@@ -361,10 +464,94 @@ class Kernelprogram
     }
     code += "}\n"
 
+    code += "__global__ void #{$kernel_name}_cuda_index(\n"
+    code += "                  const int    * ij_disp,\n"
+    code += "                  const int    * walk,\n"
+    code += "                  const EpiGPU * epi,\n"
+    code += "                  const EpjGPU * epj, \n"
+    code += "                  const int    * id_epj, \n"
+    code += "                  ForceGPU     * force"
+    code += member_decls
+    code += ", bool clear = true"
+    code +="){\n"
+    code += "  int tid = blockDim.x * blockIdx.x + threadIdx.x;\n"
+    # load epi
+    code += "  const EpiGPU ip = epi[tid];\n"
+    code += "  const int id_walk = walk[tid];\n"
+    # init force
+    code += "  ForceGPU accp;\n"
+    fvars.each{ |v|
+      iotype = h[v][0]
+      if iotype == "FORCE"
+        type = h[v][1]
+        fdpsname = h[v][2]
+        type_single = get_single_element_type(type)
+        get_vector_elements(type).each_with_index{ |dim,j|
+          dest = "accp." + fdpsname
+          dest = Expression.new([:dot,dest,dim,type_single]) if dim != ""
+          op = $accumhash[v][j]
+          abort "accum_hash == nil" if $accumhash[v][j] == nil
+          code += "    " + Duplicate.new([dest,get_initial_value(op,type_single),type_single]).convert_to_code("reference") + "\n"
+        }
+      end
+    }
+    code += "\n"
+    code += "  if(clear){\n"
+    fvars.each{ |v|
+      iotype = h[v][0]
+      if iotype == "FORCE"
+        type = h[v][1]
+        fdpsname = h[v][2]
+        type_single = get_single_element_type(type)
+        get_vector_elements(type).each_with_index{ |dim,j|
+          dest = "force[tid]." + fdpsname
+          dest = dest + "." + dim if dim != ""
+          op = $accumhash[v][j]
+          abort "accum_hash == nil" if $accumhash[v][j] == nil
+          code += "    " + dest + "= 0.f;\n"
+        }
+      end
+    }
+    code += "  }\n"
+    code += "  int t_head = blockDim.x * blockIdx.x;\n"
+    code += "  int t_tail = t_head + N_THREAD_GPU - 1;\n"
+    code += "  int nwalk_in_block = 1 + (walk[t_tail] - walk[t_head]);\n"
+    code += "\n"
+    code += "  __shared__ EpjGPU jpsh[2][N_THREAD_GPU];\n"
+    code += "\n"
+    code += "  if(1 == nwalk_in_block){\n"
+    code += "    accp = ForceKernel_1walk_index(jpsh[0], ip, id_walk, ij_disp, epj, id_epj, accp#{member_vars});\n"
+    code += "  } else if(2 == nwalk_in_block){\n"
+    code += "    int iwalk0 = walk[t_head];\n"
+    code += "    int iwalk1 = walk[t_tail];\n"
+    code += "    accp = ForceKernel_2walk_index(jpsh, ip, id_walk, iwalk0, iwalk1, ij_disp, epj, id_epj, accp#{member_vars});\n"
+    code += "  } else{\n"
+    code += "    accp = ForceKernel_multiwalk_index(ip, id_walk, ij_disp, epj, id_epj, accp#{member_vars});\n"
+    code += "  }\n"
+    # accumulate force
+    fvars.each{ |v|
+      iotype = h[v][0]
+      if iotype == "FORCE"
+        type = h[v][1]
+        fdpsname = h[v][2]
+        type_single = get_single_element_type(type)
+        get_vector_elements(type).each_with_index{ |dim,j|
+          dest = "force[tid]." + fdpsname
+          suffix = ""
+          suffix = "." + dim if dim != ""
+          op = $accumhash[v][j]
+          abort "accum_hash == nil" if $accumhash[v][j] == nil
+          code += "    #{dest}#{suffix} += accp.#{fdpsname}#{suffix};\n"
+        }
+      end
+    }
+    code += "}\n"
+
     code += "static PIKG_CUDA::CUDAPointer<EpiGPU>   dev_epi;\n"
     code += "static PIKG_CUDA::CUDAPointer<EpjGPU>   dev_epj;\n"
     code += "static PIKG_CUDA::CUDAPointer<ForceGPU> dev_force;\n"
     code += "static PIKG_CUDA::CUDAPointer<int>  ij_disp;\n"
+    code += "static PIKG_CUDA::CUDAPointer<int>  dev_id_epj;\n"
     code += "static PIKG_CUDA::CUDAPointer<int>   walk;\n"
 
 
@@ -465,7 +652,7 @@ class Kernelprogram
               new_exp = exp.replace_fdpsname_recursive(h,true)
               tmp_s = Statement.new([new_name,new_exp])
               local_s.push(tmp_s)
-            end          
+            end
           }
           local_s.each{ |s|
             code += "      "  + s.convert_to_code("reference") + "\n"
@@ -512,7 +699,7 @@ class Kernelprogram
               new_exp = exp.replace_fdpsname_recursive(h,true)
               tmp_s = Statement.new([new_name,new_exp])
               local_s.push(tmp_s)
-            end          
+            end
           }
           local_s.each{ |s|
             code += "      " + s.convert_to_code("reference") + "\n"
@@ -589,6 +776,7 @@ class Kernelprogram
     code += "                       const PIKG::S32 ni[],\n"
     code += "                       #{$force_name} *force[])\n"
     code += "{\n"
+    code += "  assert(0 < n_walk && n_walk <= N_WALK_LIMIT);\n"
     code += "  int ni_tot = 0;\n"
     code += "  for(int k=0; k<n_walk; k++){\n"
     code += "    ni_tot += ni[k];\n"
@@ -622,6 +810,216 @@ class Kernelprogram
     code += "  return 0;\n"
     code += "}\n"
 
+    code += "PIKG::S32 Dispatch#{$kernel_name}Index(\n"
+    code += "                   const PIKG::S32       tag,\n"
+    code += "                   const PIKG::S32       n_walk,\n"
+    code += "                   const #{$epi_name}    *epi[],\n"
+    code += "                   const PIKG::S32        n_epi[],\n"
+    code += "                   const PIKG::S32       *id_epj[],\n"
+    code += "                   const PIKG::S32        n_epj[],\n"
+    if $spj_name != nil
+      code += "                   const PIKG::S32       *id_spj[],\n"
+      code += "                   const PIKG::S32        n_spj[],\n"
+    end
+    code += "                   const #{$epj_name}    *epj,\n"
+    code += "                   const PIKG::S32        n_epj_tot,\n"
+    if $spj_name != nil
+      code += "                   const #{$spj_name}    *spj,\n"
+      code += "                   const PIKG::S32        n_spj_tot,\n"
+    end
+    code += "                   bool send_flag,\n"
+    code += "                   bool clear = true)\n"
+    code += "{\n"
+    code += "  static bool init_call = true;\n"
+    code += "  if(init_call){\n"
+    code += "    dev_epi  .allocate(NI_LIMIT);\n"
+    code += "    dev_epj  .allocate(NJ_LIMIT);\n"
+    code += "    dev_force.allocate(NI_LIMIT);\n"
+    code += "    ij_disp  .allocate(N_WALK_LIMIT+2);\n"
+    code += "    dev_id_epj.allocate(NJ_LIMIT);\n"
+    code += "    walk     .allocate(NI_LIMIT);\n"
+    code += "    init_call = false;\n"
+    code += "  }\n"
+    code += "  if(send_flag == true) {\n"
+    code += "    const int nj_tot = n_epj_tot"
+    if $spj_name != nil
+      code += " + n_spj_tot"
+    end
+    code += ";\n"
+    code += "    assert(NJ_LIMIT > nj_tot);\n"
+    #code += "#pragma omp parallel\n"
+    code += "    {\n"
+    #code += "#pragma omp for\n"
+    code += "      for(int i=0;i<n_epj_tot;i++){\n"
+    # epj copy to epj_gpu
+    fvars.each{ |v|
+      iotype = h[v][0]
+      modifier = h[v][3]
+      if iotype == "EPJ"
+        type = h[v][1]
+        fdpsname = h[v][2]
+        if modifier == "local"
+          local_s = Array.new
+          @statements.each{ |s|
+            name = get_name(s) if s.class == Statement
+            next if name != v
+            if name != nil && h[name][3] == "local"
+              tail = get_tail(s.name)
+              iotype = h[name][0]
+              type   = h[name][1]
+              exp = s.expression
+              index = get_io_index(iotype)
+              loop_tmp = Loop.new([index,"0","n#{index}",1,[]])
+              if tail != nil
+                new_name = "dev_epj[i].#{name}.#{tail}"
+              else
+                new_name = "dev_epj[i].#{name}"
+              end
+              new_exp = exp.replace_fdpsname_recursive(h,true)
+              tmp_s = Statement.new([new_name,new_exp])
+              local_s.push(tmp_s)
+            end
+          }
+          local_s.each{ |s|
+            code += "        "  + s.convert_to_code("reference") + "\n"
+          }
+        else
+          lhs = "dev_epj[i]." + fdpsname
+          rhs = "epj[i]." + fdpsname
+          get_vector_elements(type).each{|dim|
+            lhs_dim = lhs
+            lhs_dim = lhs + "." + dim if dim != ""
+            rhs_dim = rhs
+            rhs_dim = rhs + "." + dim if dim != ""
+            code += "        " + Statement.new([lhs_dim,rhs_dim,type]).convert_to_code("reference") + "\n"
+          }
+        end
+      end
+    }
+    code += "      }\n"
+    if $spj_name != nil
+      #code += "#pragma omp for\n"
+      code += "       for(int j=0;j<n_spj_tot;j++){\n"
+      code += "         dev_epj[n_epj_tot+j].mass = spj[j].mass;\n"
+      code += "         dev_epj[n_epj_tot+j].pos.x = spj[j].pos.x;\n"
+      code += "         dev_epj[n_epj_tot+j].pos.y = spj[j].pos.y;\n"
+      code += "         dev_epj[n_epj_tot+j].pos.z = spj[j].pos.z;\n"
+      code += "       }\n"
+    end
+    code += "    } // omp parallel\n"
+    code += "    dev_epj.h2d(nj_tot);\n"
+    code += "    return 0;\n"
+    code += "  } // send_flag\n"
+    code += "  assert(0<n_walk && n_walk <= N_WALK_LIMIT);\n"
+    code += "  ij_disp[0] = 0;\n"
+    code += "  for(int k=0; k<n_walk; k++){\n"
+    code += "    ij_disp[k+1]  = ij_disp[k] + n_epj[k];\n"
+    code += "    ij_disp[k+1] += n_spj[k];\n" if $spj_name != nil
+    code += "  }\n"
+    code += "  ij_disp[n_walk+1] = ij_disp[n_walk];\n"
+    code += "\n"
+    code += "  assert(ij_disp[n_walk] < NJ_LIMIT);\n"
+    code += "  ij_disp.h2d(n_walk + 2);\n"
+    code += "\n"
+    code += "\n"
+    code += "  int ni_tot = 0;\n"
+    code += "  int nj_tot = 0;\n"
+    code += "  for(int iw=0; iw<n_walk; iw++){\n"
+    code += "    #pragma omp parallel for\n"
+    code += "    for(int i=0; i<n_epi[iw]; i++){\n"
+    # epi copy to epi_gpu
+    fvars.each{ |v|
+      iotype = h[v][0]
+      modifier = h[v][3]
+      if iotype == "EPI"
+        type = h[v][1]
+        fdpsname = h[v][2]
+        if modifier == "local"
+          local_s = Array.new
+          @statements.each{ |s|
+            name = get_name(s) if s.class == Statement
+            next if name != v
+            if name != nil && h[name][3] == "local"
+              tail = get_tail(s.name)
+              iotype = h[name][0]
+              type   = h[name][1]
+              exp = s.expression
+              index = get_io_index(iotype)
+              loop_tmp = Loop.new([index,"0","n#{index}",1,[]])
+              if tail != nil
+                new_name = "dev_epi[ni_tot].#{name}.#{tail}"
+              else
+                new_name = "dev_epi[ni_tot].#{name}"
+              end
+              new_exp = exp.replace_fdpsname_recursive(h,true)
+              tmp_s = Statement.new([new_name,new_exp])
+              local_s.push(tmp_s)
+            end
+          }
+          local_s.each{ |s|
+            code += "      "  + s.convert_to_code("reference") + "\n"
+          }
+        else
+          lhs = "dev_epi[ni_tot]." + fdpsname
+          rhs = "epi[iw][i]." + fdpsname
+          get_vector_elements(type).each{|dim|
+            lhs_dim = lhs
+            lhs_dim = lhs + "." + dim if dim != ""
+            rhs_dim = rhs
+            rhs_dim = rhs + "." + dim if dim != ""
+            code += "      " + Statement.new([lhs_dim,rhs_dim,type]).convert_to_code("reference") + "\n"
+          }
+        end
+      end
+    }
+    code += "      walk[ni_tot] = iw;\n"
+    code += "      ni_tot++;\n"
+    code += "    }\n"
+    # id_epj copy to id_epj_gpu
+    code += "    const int offset_epj = ij_disp[iw];\n"
+    code += "    #pragma omp parallel for\n"
+    code += "    for(int j=0; j<n_epj[iw]; j++){\n"
+    code += "      dev_id_epj[offset_epj+j] = id_epj[iw][j];\n"
+    code += "    }\n"
+    code += "    nj_tot += n_epj[iw];\n"
+    if $spj_name != nil
+      code += "    const int offset_spj = ij_disp[iw] + n_epj[iw];\n"
+      code += "    #pragma omp parallel for\n"
+      code += "    for(int j=0; j<n_spj[iw]; j++){\n"
+      code += "      dev_id_epj[offset_spj+j] = id_spj[iw][j];\n"
+      code += "    }\n"
+      code += "    nj_tot += n_spj[iw];\n"
+    end
+    code += "  }\n"
+    code += "  assert(ni_tot < NI_LIMIT);\n"
+    code += "  int ni_tot_reg = ni_tot;\n"
+    code += "  if(ni_tot_reg % N_THREAD_GPU){\n"
+    code += "    ni_tot_reg /= N_THREAD_GPU;\n"
+    code += "    ni_tot_reg++;\n"
+    code += "    ni_tot_reg *= N_THREAD_GPU;\n"
+    code += "  }\n"
+    code += "  for(int i=ni_tot; i<ni_tot_reg; i++){\n"
+    code += "    walk[i] = n_walk;\n"
+    code += "  }\n"
+    code += "\n"
+    code += "  walk.h2d(ni_tot_reg);\n"
+    code += "  dev_epi.h2d(ni_tot_reg);\n"
+    code += "  dev_id_epj.h2d(nj_tot);\n"
+    code += "\n"
+    code += "  int nblocks  = ni_tot_reg / N_THREAD_GPU;\n"
+    code += "  int nthreads = N_THREAD_GPU;\n"
+    code += "  #{$kernel_name}_cuda_index <<<nblocks, nthreads>>> (ij_disp, walk,  dev_epi, dev_epj, dev_id_epj, dev_force"
+    $varhash.each{|v|
+      iotype = v[1][0]
+      if iotype == "MEMBER"
+        name = v[0]
+        code += ",#{name}"
+      end
+    }
+    code += ",clear);\n"
+    code += "\n"
+    code += "  return 0;\n"
+    code += "}\n"
 
     File.open($output_file, mode = 'w'){ |f|
       f.write(code)
