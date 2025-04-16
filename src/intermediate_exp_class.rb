@@ -209,6 +209,10 @@ class TableDecl
     end
   end
 
+  def replace_recursive(orig,replaced)
+    return self
+  end
+
   def convert_to_code(conversion_type="reference")
     case conversion_type
     when /(reference|CUDA)/
@@ -777,6 +781,10 @@ class Pragma
 
   def declare_temporal_var
     []
+  end
+
+  def replace_recursive(orig,replaced)
+    return self
   end
 
   def convert_to_code(conversion_type="reference")

@@ -1,4 +1,35 @@
 class Kernelprogram
+  def reserved_func_def_cuda(conversion_type)
+    abort if conversion_type != "CUDA"
+    code = ""
+    code += "__host__ __device__ PIKG::F64 inv(PIKG::F64 op){ return 1.0/op; }\n"
+    code += "__host__ __device__ PIKG::F32 inv(PIKG::F32 op){ return 1.f/op; }\n"
+
+    code += "__host__ __device__ PIKG::F64 table(PIKG::F64 tab[],PIKG::S64 i){ return tab[i]; }\n"
+    code += "__host__ __device__ PIKG::F32 table(PIKG::F32 tab[],PIKG::S32 i){ return tab[i]; }\n"
+
+    code += "__host__ __device__ PIKG::F64 to_float(PIKG::U64 op){return (PIKG::F64)op;}\n"
+    code += "__host__ __device__ PIKG::F32 to_float(PIKG::U32 op){return (PIKG::F32)op;}\n"
+    code += "__host__ __device__ PIKG::F64 to_float(PIKG::S64 op){return (PIKG::F64)op;}\n"
+    code += "__host__ __device__ PIKG::F32 to_float(PIKG::S32 op){return (PIKG::F32)op;}\n"
+    code += "__host__ __device__ PIKG::S64   to_int(PIKG::F64 op){return (PIKG::S64)op;}\n"
+    code += "__host__ __device__ PIKG::S32   to_int(PIKG::F32 op){return (PIKG::S32)op;}\n"
+    code += "__host__ __device__ PIKG::U64  to_uint(PIKG::F64 op){return (PIKG::U64)op;}\n"
+    code += "__host__ __device__ PIKG::U32  to_uint(PIKG::F32 op){return (PIKG::U32)op;}\n"
+
+    code += "template<typename T> __host__ __device__ PIKG::F64 to_f64(const T& op){return (PIKG::F64)op;}\n"
+    code += "template<typename T> __host__ __device__ PIKG::F32 to_f32(const T& op){return (PIKG::F32)op;}\n"
+    #code += "template<typename T> __host__ __device__ PIKG::F16 to_f16(const T& op){return (PIKG::F16)op;}\n"
+    code += "template<typename T> __host__ __device__ PIKG::S64 to_s64(const T& op){return (PIKG::S64)op;}\n"
+    code += "template<typename T> __host__ __device__ PIKG::S32 to_s32(const T& op){return (PIKG::S32)op;}\n"
+    #code += "template<typename T> __host__ __device__ PIKG::S16 to_s16(const T& op){return (PIKG::S16)op;}\n"
+    code += "template<typename T> __host__ __device__ PIKG::U64 to_u64(const T& op){return (PIKG::U64)op;}\n"
+    code += "template<typename T> __host__ __device__ PIKG::U32 to_u32(const T& op){return (PIKG::U32)op;}\n"
+    #code += "template<typename T> __host__ __device__ PIKG::U16 to_u16(const T& op){return (PIKG::U16)op;}\n"
+
+    code
+  end
+
   def generate_optimized_cuda_kernel(conversion_type,h = $varhash)
     abort "error: --class-file option must be specified for conversion_type CUDA" if $epi_file == nil
     
@@ -8,14 +39,12 @@ class Kernelprogram
     
     code = String.new
 
+    code += "#include <cuda/std/limits>\n"
     code += "#include \"#{$epi_file}\"\n"
     code += "#include \"#{$epj_file}\"\n" if $epj_file != $epi_file
     code += "#include \"#{$force_file}\"\n" if ($force_file != $epi_file) && ($force_file != $epj_file)
     code += "#include \"pikg_cuda_pointer.hpp\"\n"
     code += "#include \"pikg_vector.hpp\"\n"
-
-    code += "__device__ float  table(float  tab[],int i){ return tab[i]; }\n"
-    code += "__device__ double table(double tab[],int i){ return tab[i]; }\n"
 
     fvars = generate_force_related_map(@statements)
     # GPU class definition
@@ -25,12 +54,13 @@ class Kernelprogram
       modifier = h[v][3]
       if iotype == "EPI"
         type = h[v][1]
+        modifier = h[v][3]
         if modifier == "local"
-          code += Declaration.new([type,v]).convert_to_code(conversion_type)
+          fdpsname = v
         else
           fdpsname = h[v][2]
-          code += Declaration.new([type,fdpsname]).convert_to_code(conversion_type)
         end
+        code += Declaration.new([type,fdpsname]).convert_to_code(conversion_type)
       end
     }
     code += "};\n"
@@ -40,12 +70,13 @@ class Kernelprogram
       modifier = h[v][3]
       if iotype == "EPJ"
         type = h[v][1]
+        modifier = h[v][3]
         if modifier == "local"
-          code += Declaration.new([type,v]).convert_to_code(conversion_type)
+          fdpsname = v
         else
           fdpsname = h[v][2]
-          code += Declaration.new([type,fdpsname]).convert_to_code(conversion_type)
         end
+        code += Declaration.new([type,fdpsname]).convert_to_code(conversion_type)
       end
     }
     code += "};\n"
@@ -54,8 +85,12 @@ class Kernelprogram
       iotype = h[v][0]
       if iotype == "FORCE"
         type = h[v][1]
-        fdpsname = h[v][2]
         modifier = h[v][3]
+        if modifier == "local"
+          fdpsname = v
+        else
+          fdpsname = h[v][2]
+        end
         code += Declaration.new([type,fdpsname]).convert_to_code(conversion_type)
       end
     }
@@ -106,6 +141,7 @@ class Kernelprogram
         member_decls += get_declare_type(type,conversion_type) + " " + name
       end
     }
+    code += reserved_func_def_cuda(conversion_type)
 
     split_vars = Array.new
     ["EPI","EPJ","FORCE"].each{ |io|
@@ -140,13 +176,10 @@ class Kernelprogram
     new_s = Array.new
 
     @statements.each{ |s|
+      code += s.convert_to_code(conversion_type) + "\n" if s.class == TableDecl
       next if s.class == Pragma or s.class == TableDecl
       next if s.class == Statement and h[get_name(s)][3] == "local"
       new_s.push(s)
-    }
-
-    @statements.each{ |s|
-      code += s.convert_to_code(conversion_type) + "\n" if s.class == TableDecl
     }
 
     generate_jloop_body(new_s,fvars,split_vars,conversion_type).each{ |s|
@@ -305,7 +338,7 @@ class Kernelprogram
           dest = Expression.new([:dot,dest,dim,type_single]) if dim != ""
           op = $accumhash[v][j]
           abort "accum_hash == nil" if $accumhash[v][j] == nil
-          code += "    " + Duplicate.new([dest,get_initial_value(op,type_single),type_single]).convert_to_code("reference") + "\n"
+          code += "    " + Duplicate.new([dest,get_initial_value(op,type_single,conversion_type),type_single]).convert_to_code("reference") + "\n"
         }
       end
     }
@@ -444,41 +477,26 @@ class Kernelprogram
       modifier = h[v][3]
       if iotype == "EPI"
         type = h[v][1]
-        fdpsname = h[v][2]
+        modifier = h[v][3]
         if modifier == "local"
-          local_s = Array.new
+          fdpsname = v
           @statements.each{ |s|
-            name = get_name(s) if s.class == Statement
-            next if name != v
-            if name != nil && h[name][3] == "local"
-              tail = get_tail(s.name)
-              iotype = h[name][0]
-              type   = h[name][1]
-              exp = s.expression
-              index = get_io_index(iotype)
-              loop_tmp = Loop.new([index,"0","n#{index}",1,[]])
-              if tail != nil
-                new_name = "dev_epi[ni_tot].#{name}.#{tail}"
-              else
-                new_name = "dev_epi[ni_tot].#{name}"
-              end
-              new_exp = exp.replace_fdpsname_recursive(h,true)
-              tmp_s = Statement.new([new_name,new_exp])
-              local_s.push(tmp_s)
-            end          
-          }
-          local_s.each{ |s|
-            code += "      "  + s.convert_to_code("reference") + "\n"
+            if get_name(s) == v
+              dim = get_tail(s)
+              new_name = "dev_epi[ni_tot]."+fdpsname
+              new_name = new_name + "." + dim if dim != nil
+              new_exp = s.expression.replace_fdpsname_recursive(h,true)
+              code += "      " + Statement.new([new_name, new_exp,type]).convert_to_code("reference") + "\n"
+            end
           }
         else
-          lhs = "dev_epi[ni_tot]." + fdpsname
-          rhs = "epi[iw][i]." + fdpsname
+          fdpsname = h[v][2]
           get_vector_elements(type).each{|dim|
-            lhs_dim = lhs
-            lhs_dim = lhs + "." + dim if dim != ""
-            rhs_dim = rhs
-            rhs_dim = rhs + "." + dim if dim != ""
-            code += "      " + Statement.new([lhs_dim,rhs_dim,type]).convert_to_code("reference") + "\n"
+            if dim == ""
+              code += "      " + Statement.new(["dev_epi[ni_tot]."+fdpsname,"epi[iw][i]."+fdpsname,type]).convert_to_code("reference") + "\n"
+            else
+              code += "      " + Statement.new(["dev_epi[ni_tot]."+fdpsname+"."+dim,"epi[iw][i]."+fdpsname+"."+dim,type]).convert_to_code("reference") + "\n"
+            end
           }
         end
       end
@@ -492,33 +510,20 @@ class Kernelprogram
       iotype = h[v][0]
       modifier = h[v][3]
       if iotype == "EPJ"
+        type = h[v][1]
+        modifier = h[v][3]
         if modifier == "local"
-          local_s = Array.new
+          fdpsname = v
           @statements.each{ |s|
-            name = get_name(s) if s.class == Statement
-            next if name != v
-            if name != nil && h[name][3] == "local"
-              tail = get_tail(s.name)
-              iotype = h[name][0]
-              type   = h[name][1]
-              exp = s.expression
-              index = get_io_index(iotype)
-              loop_tmp = Loop.new([index,"0","n#{index}",1,[]])
-              if tail != nil
-                new_name = "dev_epj[nj_tot].#{name}.#{tail}"
-              else
-                new_name = "dev_epj[nj_tot].#{name}"
-              end
-              new_exp = exp.replace_fdpsname_recursive(h,true)
-              tmp_s = Statement.new([new_name,new_exp])
-              local_s.push(tmp_s)
-            end          
-          }
-          local_s.each{ |s|
-            code += "      " + s.convert_to_code("reference") + "\n"
+            if get_name(s) == v
+              dim = get_tail(s)
+              new_name = "dev_epj[nj_tot]."+fdpsname
+              new_name = new_name + "." + dim if dim != nil
+              new_exp = s.expression.replace_fdpsname_recursive(h,true)
+              code += "      " + Statement.new([new_name, new_exp,type]).convert_to_code("reference") + "\n"
+            end
           }
         else
-          type = h[v][1]
           fdpsname = h[v][2]
           get_vector_elements(type).each{|dim|
             if dim == ""
@@ -539,8 +544,12 @@ class Kernelprogram
         iotype = h[v][0]
         if iotype == "EPJ"
           type = h[v][1]
-          fdpsname = h[v][2]
           modifier = h[v][3]
+          if modifier == "local"
+            fdpsname = v
+          else
+            fdpsname = h[v][2]
+          end
           get_vector_elements(type).each{|dim|
             if dim == ""
               code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname,"spj[iw][j]."+fdpsname,type]).convert_to_code("reference") + "\n"
@@ -603,8 +612,12 @@ class Kernelprogram
       iotype = h[v][0]
       if iotype == "FORCE"
         type = h[v][1]
-        fdpsname = h[v][2]
         modifier = h[v][3]
+        if modifier == "local"
+          fdpsname = v
+        else
+          fdpsname = h[v][2]
+        end
         type_single = get_single_element_type(type)
         get_vector_elements(type).zip($accumhash[v]){ |dim,op|
           dest = "force[iw][i]." + fdpsname
