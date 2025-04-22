@@ -3,17 +3,28 @@
 
 #ifdef PIKG_USE_FDPS_VECTOR
 #include <particle_simulator.hpp>
-namespace PIKG = ParticleSimulator;
-
-namespace ParticleSimulator{
-
-#else
+#endif
 
 #include <iostream>
 #include <iomanip>
 #include <cassert>
 
 namespace PIKG{
+#ifdef PIKG_USE_FDPS_VECTOR
+  using F64 = ParticleSimulator::F64;
+  using F32 = ParticleSimulator::F32;
+  using U64 = ParticleSimulator::U64;
+  using U32 = ParticleSimulator::U32;
+  using S64 = ParticleSimulator::S64;
+  using S32 = ParticleSimulator::S32;
+
+  using F64vec = ParticleSimulator::F64vec3;
+  using F32vec = ParticleSimulator::F32vec3;
+  using F64vec3 = ParticleSimulator::F64vec3;
+  using F32vec3 = ParticleSimulator::F32vec3;
+  using F64vec2 = ParticleSimulator::F64vec2;
+  using F32vec2 = ParticleSimulator::F32vec2;
+#else
   using F64 = double;
   using F32 = float;
   //using F16 = float16_t;
@@ -315,7 +326,7 @@ namespace PIKG{
   using F32vec2 = Vector2<F32>;
   //using F16vec2 = Vector2<float16_t>;
 
-#endif
+#endif // PIKG_USE_FDPS_VECTOR
 
   template<class T>
   class Vector4{
