@@ -45,6 +45,9 @@ class Kernelprogram
     code += "#include \"#{$force_file}\"\n" if ($force_file != $epi_file) && ($force_file != $epj_file)
     code += "#include \"pikg_cuda_pointer.hpp\"\n"
     code += "#include \"pikg_vector.hpp\"\n"
+    code += "#include \"pikg_time_profiler.hpp\"\n"
+
+    code += "static PIKG::TimeProfiler prof;\n"
 
     fvars = generate_force_related_map(@statements)
     # GPU class definition
@@ -100,9 +103,9 @@ class Kernelprogram
     # constant definition
     code += "enum{\n"
     code += "  N_THREAD_GPU = 32,\n"
-    code += "  N_WALK_LIMIT = 1000,\n"
+    code += "  N_WALK_LIMIT = 2048,\n"
     code += "  NI_LIMIT     = N_WALK_LIMIT*1000,\n"
-    code += "  NJ_LIMIT     = N_WALK_LIMIT*10000,\n"
+    code += "  NJ_LIMIT     = N_WALK_LIMIT*100000,\n"
     code += "};\n"
 
     # h2d copy func
@@ -469,6 +472,7 @@ class Kernelprogram
     code += "\n"
     code += "  int ni_tot = 0;\n"
     code += "  int nj_tot = 0;\n"
+    code += "  prof.start(\"CopyEP\");\n"
     code += "  for(int iw=0; iw<n_walk; iw++){\n"
     code += "    for(int i=0; i<n_epi[iw]; i++){\n"
     # epi copy to epi_gpu
@@ -563,6 +567,7 @@ class Kernelprogram
       code += "    }\n"
     end
     code += "  }\n"
+    code += "  prof.end(\"CopyEP\");\n"
     code += "  assert(ni_tot < NI_LIMIT);\n"
     code += "  int ni_tot_reg = ni_tot;\n"
     code += "  if(ni_tot_reg % N_THREAD_GPU){\n"
@@ -574,12 +579,17 @@ class Kernelprogram
     code += "    walk[i] = n_walk;\n"
     code += "  }\n"
     code += "\n"
+    code += "  prof.start(\"MemcpyH2D\");\n"
     code += "  walk.h2d(ni_tot_reg);\n"
     code += "  dev_epi.h2d(ni_tot_reg);\n"
     code += "  dev_epj.h2d(nj_tot);\n"
+    code += "  prof.end(\"MemcpyH2D\");\n"
     code += "\n"
     code += "  int nblocks  = ni_tot_reg / N_THREAD_GPU;\n"
     code += "  int nthreads = N_THREAD_GPU;\n"
+    code += "#ifdef PIKG_MEASURE_CUDA_KERNEL_TIME\n"
+    code += "  prof.start(\"Kernel\");\n"
+    code += "#endif\n"
     code += "  #{$kernel_name}_cuda <<<nblocks, nthreads>>> (ij_disp, walk,  dev_epi, dev_epj, dev_force"
     $varhash.each{|v|
       iotype = v[1][0]
@@ -589,6 +599,10 @@ class Kernelprogram
       end
     }
     code += ",clear);\n"
+    code += "#ifdef PIKG_MEASURE_CUDA_KERNEL_TIME\n"
+    code += "  cudaDeviceSynchronize();\n"
+    code += "  prof.end(\"Kernel\");\n"
+    code += "#endif\n"
     code += "\n"
     code += "  return 0;\n"
     code += "}\n"
@@ -633,6 +647,10 @@ class Kernelprogram
     code += "    }\n"
     code += "  }\n"
     code += "  return 0;\n"
+    code += "}\n"
+
+    code += "void clearTimeProfiler(){\n"
+    code += "  prof.clearAll();\n"
     code += "}\n"
 
 
