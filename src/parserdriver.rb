@@ -13,6 +13,7 @@ require_relative "A64FX.rb"
 require_relative "AVX-512.rb"
 require_relative "AVX2.rb"
 require_relative "CUDA.rb"
+require_relative "MNCore2.rb"
 
 $dimension = 3
 $reserved_function = ["rsqrt","sqrt","inv","max","min","madd","msub","nmadd","nmsub","table","to_int","to_uint","to_float","to_f16","to_f32","to_f64","to_f16vec","to_f32vec","to_f64vec","to_f16vec2","to_f32vec2","to_f64vec2","to_f16vec3","to_f32vec3","to_f64vec3","to_f16vec4","to_f32vec4","to_f64vec4","to_s16","to_s32","to_s64","to_u16","to_u32","to_u64"]
@@ -1497,7 +1498,7 @@ class String
       self
     end
   end
-  def replace_fdpsname_recursive(h=$varhash,multiwalk=false)
+  def replace_fdpsname_recursive(h=$varhash)
     name = self.dup
     ret = name
     return ret if h[name] == nil
@@ -1507,11 +1508,7 @@ class String
     if iotype != nil && fdpsname != nil
       op = "i" if iotype == "EPI" || iotype == "FORCE"
       op = "j" if iotype == "EPJ"
-      if multiwalk
-        ret = Expression.new([:dot,Expression.new([:array,Expression.new([:array,get_iotype_array(iotype),"iw"]),op]),fdpsname,type])
-      else
-        ret = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),op]),fdpsname,type])
-      end
+      ret = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),op]),fdpsname,type])
     end
     ret
   end
@@ -1554,6 +1551,7 @@ $conversion_type = "reference"
 $swpl_stage = 1
 $unroll_stage = 1
 $output_file = "kernel.hpp"
+$max_subwalk_size=0
 while true
   opt = ARGV.shift
   break if opt == nil
@@ -1631,6 +1629,10 @@ while true
       $epj_file = $force_file = $epi_file
       warn "class file: #{$epi_file}"
     end
+  when "--max-subwalk-size"
+    $max_subwalk_size = ARGV.shift.to_i
+    abort "max_subwalk_size must be >= 64" if $max_subwalk_size < 64
+    warn "max_subwalk_size: #{$max_subwaok_size} (only for MN-Core2)"
   when "--version"
     warn "pikg version 0.1d"
     abort
@@ -1647,6 +1649,7 @@ while true
     help_message += "--c-iterface [file_name] : enable c-interface mode. header file name of prototype definition can be specified.\n"
     help_message += "--fortran-iterface module_name : enable fortran-interface mode. c-interface mode is automatically enabled. specify kernel module name as module_name. module is output to module_name + \".F90\"\n"
     help_message += "--initializer-name [func_name] : function name of kernel initializer for c-interface (default: kernel_name + \"_initialize\")\n"
+    help_message += "--max-subwalk-size size : maximum number of member variable of epi particles in a subwalk in long word (F64)\n"
     help_message += "--version : show version info\n"
     help_message += "--help : show this help message\n"
     
@@ -1722,6 +1725,8 @@ else
   case $conversion_type
   when "CUDA"
     program.generate_optimized_cuda_kernel($conversion_type)
+  when "MNCore2"
+    program.generate_optimized_mncl_kernel_for_mncore2(filename, $conversion_type)
 #  when "A64FX"
 #    program.generate_optimized_code($conversion_type)
   else
