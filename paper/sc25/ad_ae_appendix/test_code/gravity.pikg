@@ -1,0 +1,7 @@
+F32 eps2
+rij = EPI.pos - EPJ.pos
+r2=rij*rij+eps2
+rinv = rsqrt(r2)
+mrinv = EPJ.mass * rinv 
+mrinv3 = mrinv * rinv * rinv 
+FORCE.acc += rij * mrinv3
