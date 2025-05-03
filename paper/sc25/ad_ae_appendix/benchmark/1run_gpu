@@ -1,0 +1,53 @@
+#!/bin/bash
+
+set -x
+
+FDPS_PATH=$HOME/FDPS
+PIKG_ROOT=../../../../
+
+export OMP_DISPLAY_ENV=VERBOSE
+export OMP_NUM_THREADS=72
+export GOMP_CPU_AFFINITY=0-$(($OMP_NUM_THREADS - 1))
+export OMP_SCHEDULE=static
+export OMP_STACKSIZE=16M
+export OMP_WAIT_POLICY=active
+nptcl=$((896*256))
+
+measurement_dir=./measurements
+log_dir=$measurement_dir/NH200/logs
+fig_dir=$measurement_dir/fig
+mkdir -p $log_dir $fig_dir
+
+# for measurement
+PS_PATH=$FDPS_PATH/src PIKG_ROOT=$PIKG_ROOT use_pikg_cuda=yes make -B
+l=64
+for n in 64 128 256 512 1024 2048 4096 8192 16384; do
+./nbody.out -N $nptcl -n $n -l $l -t 0.5 -T 0.125 -w 1024 &> $log_dir/n${nptcl}_ng${n}_l${l}.log
+done
+
+dat=$log_dir/../gpu_group_limit_test.dat
+gpl=$measurement_dir/gpu_group_limit.gpl
+./scripts/kernel_perf_and_throughput_gpu.sh $log_dir/n${nptcl}*l64.log > $dat
+cat << EOF >$gpl
+set term pdf
+
+set xlabel "Group limit"
+set ylabel "steps per second"
+set y2tics
+set y2label "Gflops"
+set ytics nomirror
+set key left
+
+set yrange [0:300]
+set y2range  [0:30000]
+
+set boxwidth 0.5 relative
+set style fill solid border lc rgb "black"
+
+set grid y
+
+set output "$fig_dir/gpu_group_limit.pdf"
+p "$dat" u 0:4 axis x1y2 w boxes lw 2 ti "Kernel performance", \
+  "$dat" u 0:(16/\$3):xtic(1) w lp ti "Throughput"
+EOF
+gnuplot $gpl

@@ -1,0 +1,11 @@
+F32 rc2
+rij = EPI.pos - EPJ.pos
+r2 = rij * rij
+rinv = 0.0f
+if r2 < rc2 && r2 > 0.0f
+  rinv = rsqrt(r2)
+  rinv2 = rinv * rinv
+  rinv6 = rinv2 * rinv2 * rinv2
+  f = rinv6 * rinv2 * (48.0f * rinv6 - 24.0f)
+  FORCE.force -= rij * f
+endif
