@@ -1,0 +1,49 @@
+#!/bin/bash
+
+set -x
+
+PIKG_ROOT=../PIKG
+FDPS_ROOT=../FDPS
+PFCOMP_ROOT=/opt/pfn/pfcomp
+
+export OMP_NUM_THREADS=20
+export OMP_SCHEDULE=static
+export OMP_STACKSIZE=16M
+
+export KMP_AFFINITY=verbose,compact
+export KMP_HW_SUBSET=${OMP_NUM_THREADS}c,1t
+
+#export CODEGEN_MNLINKER_ENABLE_DDMA_TRACE=1
+
+measurement_dir=./measurements
+log_dir=$measurement_dir/MN-Core2/logs
+fig_dir=$measurement_dir/fig
+mkdir -p $log_dir $fig_dir
+
+nptcl=$((896*256))
+PIKG_ROOT=$PIKG_ROOT use_pikg_mncore2=yes make -B
+for n in 64 128 256 512 1024 2048 4096 8192; do
+numactl -C 0-$(($OMP_NUM_THREADS - 1)) --localalloc ./nbody.out -N $nptcl -n $n -l 64 -w 1024 -t 0.5 -T 0.125 > $log_dir/n${nptcl}_ng${n}_l64.log
+done
+
+dat=$log_dir/../mncore2_group_limit_test.dat
+gpl=$measurement_dir/mncore2_group_limit.gpl
+./scripts/throughput.sh $log_dir/n${nptcl}*l64.log > $dat
+cat << EOF > $gpl
+set term pdf
+
+set xlabel "Group limit"
+set ylabel "steps per second"
+set key left
+
+set yrange [0:60]
+
+set boxwidth 0.5 relative
+set style fill solid border lc rgb "black"
+
+set grid y
+
+set output "$fig_dir/mncore2_group_limit.pdf"
+p "$dat" u 0:(16/\$3):xtic(1) w lp ti "Throughput"
+EOF
+gnuplot $gpl

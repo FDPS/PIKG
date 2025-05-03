@@ -1,0 +1,660 @@
+diff --git a/src/key.hpp b/src/key.hpp
+index 31f77a5..2c5777a 100644
+--- a/src/key.hpp
++++ b/src/key.hpp
+@@ -154,9 +154,10 @@ namespace ParticleSimulator{
+         //~MortonKey(){};
+         //MortonKey(const MortonKey &);
+         //MortonKey & operator = (const MortonKey &);
+-
++#if !defined(PARTICLE_SIMULATOR_USE_64BIT_KEY)
+ 	static inline S32 keylevelmaxhigh(){return S32 (kLevMaxHi);}
+ 	static inline S32 keylevelmaxlow(){return S32 (kLevMaxLo);}
++#endif
+         void initialize(const F64 half_len,
+                         const F64vec & center=0.0){
+             half_len_ = half_len;
+diff --git a/src/ps_defs.hpp b/src/ps_defs.hpp
+index 3e19e79..199176c 100644
+--- a/src/ps_defs.hpp
++++ b/src/ps_defs.hpp
+@@ -1088,8 +1088,8 @@ namespace ParticleSimulator{
+                            comm_);
+ #else
+             for(int i=0; i<n_send; i++) val_recv[i] = val_send[i];
+-            n_recv[0] = n_recv_disp[1] = n_send;
+-            n_recv_disp[0] = 0;
++            //n_recv[0] = n_recv_disp[1] = n_send;
++            //n_recv_disp[0] = 0;
+ #endif
+         }
+ 
+@@ -1984,6 +1984,7 @@ namespace ParticleSimulator{
+         F64 make_local_tree;
+         F64 make_global_tree;
+         F64 set_root_cell;
++        F64 clear_force;
+         F64 calc_force;
+         F64 calc_moment_local_tree;
+         F64 calc_moment_global_tree;
+@@ -1996,8 +1997,13 @@ namespace ParticleSimulator{
+         // not public
+         F64 morton_key_local_tree;
+         F64 morton_sort_local_tree;
++        F64 morton_sort_local_tree__set_tp;
++        F64 morton_sort_local_tree__sort;
++        F64 morton_sort_local_tree__copy_ep;
+         F64 link_cell_local_tree;
+         F64 morton_sort_global_tree;
++        F64 morton_sort_global_tree__sort;
++        F64 morton_sort_global_tree__copy_ep;
+         F64 link_cell_global_tree;
+ 
+         F64 make_local_tree_tot; // make_local_tree + calc_moment_local_tree
+@@ -2009,10 +2015,13 @@ namespace ParticleSimulator{
+         F64 calc_force__core__copy_ep;
+         F64 calc_force__core__dispatch;
+         F64 calc_force__core__retrieve;
++        F64 calc_force__core__kernel;
+ 
+         F64 calc_force__make_ipgroup;
++        F64 calc_force__make_interaction_list_index;
+         F64 calc_force__core;
+         F64 calc_force__copy_original_order;
++        F64 calc_force__other;
+ 
+         F64 exchange_particle__find_particle;
+         F64 exchange_particle__find_particle_2;
+@@ -2052,7 +2061,7 @@ namespace ParticleSimulator{
+             return collect_sample_particle + decompose_domain + exchange_particle
+                 + set_particle_local_tree + set_particle_global_tree
+                 + set_root_cell
+-                + calc_force + calc_moment_local_tree + calc_moment_global_tree + make_LET_1st + make_LET_2nd + exchange_LET_1st + exchange_LET_2nd
++                + clear_force + calc_force + calc_moment_local_tree + calc_moment_global_tree + make_LET_1st + make_LET_2nd + exchange_LET_1st + exchange_LET_2nd
+                 + morton_sort_local_tree + link_cell_local_tree 
+                 + morton_sort_global_tree + link_cell_global_tree
+                 + add_moment_as_sp_local + add_moment_as_sp_global
+@@ -2069,10 +2078,33 @@ namespace ParticleSimulator{
+             fout<<"  set_particle_global_tree= "<<set_particle_global_tree<<std::endl;
+             fout<<"  set_root_cell= "<<set_root_cell<<std::endl;
+             fout<<"  morton_sort_local_tree= "<<morton_sort_local_tree<<std::endl;
++            if(level > 0){
++              fout<<"    morton_sort_local_tree__set_tp= "<<morton_sort_local_tree__set_tp<<std::endl;
++              fout<<"    morton_sort_local_tree__sort= "<<morton_sort_local_tree__sort<<std::endl;
++              fout<<"    morton_sort_local_tree__copy_ep= "<<morton_sort_local_tree__copy_ep<<std::endl;
++	    }
+             fout<<"  link_cell_local_tree= "<<link_cell_local_tree<<std::endl;
+             fout<<"  morton_sort_global_tree= "<<morton_sort_global_tree<<std::endl;
++            if(level > 0){
++              fout<<"    morton_sort_global_tree__sort= "<<morton_sort_global_tree__sort<<std::endl;
++              fout<<"    morton_sort_global_tree__copy_ep= "<<morton_sort_global_tree__copy_ep<<std::endl;
++	    }
+             fout<<"  link_cell_global_tree= "<<link_cell_global_tree<<std::endl;
++            fout<<"  clear_force= "<<clear_force<<std::endl;
+             fout<<"  calc_force= "<<calc_force<<std::endl;
++            if(level > 0){
++                fout<<"    calc_force__make_ipgroup= "<<calc_force__make_ipgroup<<std::endl;
++                fout<<"    calc_force__make_interaction_list_index= "<<calc_force__make_interaction_list_index<<std::endl;
++                fout<<"    calc_force__core= "<<calc_force__core<<std::endl;
++                fout<<"      calc_force__core__walk_tree= "<<calc_force__core__walk_tree<<std::endl;
++                fout<<"      calc_force__core__keep_list= "<<calc_force__core__keep_list<<std::endl;
++                fout<<"      calc_force__core__copy_ep= "<<calc_force__core__copy_ep<<std::endl;
++                fout<<"      calc_force__core__dispatch= "<<calc_force__core__dispatch<<std::endl;
++                fout<<"      calc_force__core__retrieve= "<<calc_force__core__retrieve<<std::endl;
++                fout<<"      calc_force__core__kernel= "<<calc_force__core__kernel<<std::endl;
++                fout<<"    calc_force__copy_original_order= "<<calc_force__copy_original_order<<std::endl;
++                fout<<"    calc_force__other= "<<calc_force__other<<std::endl;
++            }
+             fout<<"  calc_moment_local_tree= "<<calc_moment_local_tree<<std::endl;
+             fout<<"  calc_moment_global_tree= "<<calc_moment_global_tree<<std::endl;
+             fout<<"  add_moment_as_sp_global= "<<add_moment_as_sp_global<<std::endl;
+@@ -2093,13 +2125,16 @@ namespace ParticleSimulator{
+ 
+         TimeProfile () {
+             collect_sample_particle = decompose_domain = exchange_particle = set_particle_local_tree = set_particle_global_tree = make_local_tree = make_global_tree = set_root_cell
+-                = calc_force = calc_moment_local_tree = calc_moment_global_tree = make_LET_1st = make_LET_2nd 
++                = clear_force = calc_force = calc_moment_local_tree = calc_moment_global_tree = make_LET_1st = make_LET_2nd 
+                 = exchange_LET_1st = exchange_LET_2nd = 0.0;
+ 	    morton_key_local_tree = 0;
+             morton_sort_local_tree = link_cell_local_tree
+                 = morton_sort_global_tree = link_cell_global_tree = 0.0;
++	    morton_sort_local_tree__set_tp = morton_sort_local_tree__sort = morton_sort_local_tree__copy_ep = 0.0;
++	    morton_sort_global_tree__sort = morton_sort_global_tree__copy_ep = 0.0;
+             make_local_tree_tot = make_global_tree_tot = exchange_LET_tot = 0.0;
+-            calc_force__make_ipgroup = calc_force__core = calc_force__copy_original_order = 0.0;
++            calc_force__make_ipgroup = calc_force__make_interaction_list_index = calc_force__core = calc_force__copy_original_order = 0.0;
++            calc_force__core__walk_tree = calc_force__core__keep_list = calc_force__core__copy_ep = calc_force__core__dispatch = calc_force__core__retrieve = calc_force__core__kernel = 0.0;
+ 
+             exchange_particle__find_particle = exchange_particle__exchange_particle = 0.0;
+ 
+@@ -2135,21 +2170,29 @@ namespace ParticleSimulator{
+             ret.exchange_LET_2nd = this->exchange_LET_2nd + rhs.exchange_LET_2nd;
+ 
+             ret.morton_sort_local_tree = this->morton_sort_local_tree + rhs.morton_sort_local_tree;
++            ret.morton_sort_local_tree__set_tp= this->morton_sort_local_tree__set_tp + rhs.morton_sort_local_tree__set_tp;
++            ret.morton_sort_local_tree__sort = this->morton_sort_local_tree__sort + rhs.morton_sort_local_tree__sort;
++            ret.morton_sort_local_tree__copy_ep = this->morton_sort_local_tree__copy_ep + rhs.morton_sort_local_tree__copy_ep;
+             ret.link_cell_local_tree = this->link_cell_local_tree + rhs.link_cell_local_tree;
+             ret.morton_sort_global_tree = this->morton_sort_global_tree + rhs.morton_sort_global_tree;
++            ret.morton_sort_global_tree__sort = this->morton_sort_global_tree__sort + rhs.morton_sort_global_tree__sort;
++            ret.morton_sort_global_tree__copy_ep = this->morton_sort_global_tree__copy_ep + rhs.morton_sort_global_tree__copy_ep;
+             ret.link_cell_global_tree = this->link_cell_global_tree + rhs.link_cell_global_tree;
+ 
+             ret.make_local_tree_tot = this->make_local_tree_tot + rhs.make_local_tree_tot;
+             ret.make_global_tree_tot = this->make_global_tree_tot + rhs.make_global_tree_tot;
+             ret.exchange_LET_tot = this->exchange_LET_tot + rhs.exchange_LET_tot;
+ 
++	    ret.clear_force = this->clear_force + rhs.clear_force;
+             ret.calc_force__core__walk_tree = this->calc_force__core__walk_tree + rhs.calc_force__core__walk_tree;
+             ret.calc_force__core__keep_list = this->calc_force__core__keep_list + rhs.calc_force__core__keep_list;
+             ret.calc_force__core__dispatch = this->calc_force__core__dispatch + rhs.calc_force__core__dispatch;
++            ret.calc_force__core__kernel = this->calc_force__core__kernel + rhs.calc_force__core__kernel;
+             ret.calc_force__core__copy_ep = this->calc_force__core__copy_ep + rhs.calc_force__core__copy_ep;
+             ret.calc_force__core__retrieve = this->calc_force__core__retrieve + rhs.calc_force__core__retrieve;
+ 
+             ret.calc_force__make_ipgroup = this->calc_force__make_ipgroup + rhs.calc_force__make_ipgroup;
++            ret.calc_force__make_interaction_list_index = this->calc_force__make_interaction_list_index + rhs.calc_force__make_interaction_list_index;
+             ret.calc_force__core = this->calc_force__core + rhs.calc_force__core;
+             ret.calc_force__copy_original_order = this->calc_force__copy_original_order + rhs.calc_force__copy_original_order;
+ 
+@@ -2197,13 +2240,16 @@ namespace ParticleSimulator{
+ 	    morton_key_local_tree = 0;
+             morton_sort_local_tree = link_cell_local_tree 
+                 = morton_sort_global_tree = link_cell_global_tree = 0.0;
++	    morton_sort_local_tree__set_tp = morton_sort_local_tree__sort = morton_sort_local_tree__copy_ep = 0.0;
++	    morton_sort_global_tree__sort = morton_sort_global_tree__copy_ep = 0.0;
+             make_local_tree_tot = make_global_tree_tot = exchange_LET_tot = 0.0;
+             calc_force__core__walk_tree = 0.0;
+             calc_force__core__keep_list = 0.0;
+             calc_force__core__copy_ep   = 0.0;
+             calc_force__core__dispatch  = 0.0;
+             calc_force__core__retrieve  = 0.0;
+-            calc_force__make_ipgroup = calc_force__core = calc_force__copy_original_order = 0.0;
++            calc_force__core__kernel  = 0.0;
++            calc_force__make_ipgroup = calc_force__make_interaction_list_index = calc_force__core = calc_force__copy_original_order = 0.0;
+             exchange_particle__find_particle = exchange_particle__exchange_particle = 0.0;
+ 	    exchange_particle__exchange_particle_1 = 0.0;
+ 	    exchange_particle__exchange_particle_2 = 0.0;
+diff --git a/src/tree_for_force_impl.hpp b/src/tree_for_force_impl.hpp
+index d99e5f9..fe050f2 100644
+--- a/src/tree_for_force_impl.hpp
++++ b/src/tree_for_force_impl.hpp
+@@ -213,10 +213,11 @@ PS_OMP_CRITICAL
+ 		    outer[ith].merge(psys[i].getPos(), epj_org_[i+offset].getRSearch());
+ 		} else if constexpr (HasgetRSearchMethod<Tepi>::value){
+ 		    outer[ith].merge(psys[i].getPos(), epi_org_[i+offset].getRSearch());
+-		} else {
+-		    outer[ith].merge(psys[i].getPos());
+ 		}
+ 	    }
++	    if constexpr (!(HasgetRSearchMethod<Tepj>::value || HasgetRSearchMethod<Tepi>::value)){
++	        outer[ith] = inner[ith];
++	    }
+         } // end of OMP scope
+         for(S32 i=0; i<n_thread; i++){
+             inner_boundary_of_local_tree_.merge(inner[i]);
+@@ -326,7 +327,7 @@ PS_OMP_CRITICAL
+         if(comm_info_.getRank()==0){
+             PARTICLE_SIMULATOR_PRINT_LINE_INFO();
+             std::cout<<"length_="<<length_<<" center_="<<center_<<std::endl;
+-            std::cout<<"pos_root_cell="<<getPosRootCell<<std::endl;
++            std::cout<<"pos_root_cell="<<getPosRootCell()<<std::endl;
+         }
+ #endif
+         time_profile_.set_root_cell += GetWtime() - time_offset;
+@@ -565,21 +566,46 @@ PS_OMP_BARRIER
+                 }
+             }
+ #else
+-            U32 n_cnt_ep = 0;
+-            U32 n_cnt_sp = 0;
+-            for(S32 i=0; i<n_glb_tot_; i++){
++	    static std::vector<std::pair<S32,U32> > adri_epj,adri_spj;
++	    adri_epj.resize(n_glb_tot_);
++	    adri_epj.resize(n_glb_tot_);
++	    if(!reuse){
++              U32 n_cnt_ep = 0;
++              U32 n_cnt_sp = 0;
++              for(S32 i=0; i<n_glb_tot_; i++){
+                 const U32 adr = adr_org_from_adr_sorted_glb_[i];
+                 if( GetMSB(adr) == 0){
+                     epj_sorted_[n_cnt_ep] = epj_org_[adr];
+                     tp_glb_[i].adr_ptcl_ = n_cnt_ep;
++		    adri_epj[n_cnt_ep] = std::pair<S32,U32>(i,adr);
+                     n_cnt_ep++;
+                 }
+                 else{
+                     spj_sorted_[n_cnt_sp] = spj_org_[ClearMSB(adr)];
+                     tp_glb_[i].adr_ptcl_ = SetMSB(n_cnt_sp);
++		    adri_spj[n_cnt_sp] = std::pair<S32,U32>(i,ClearMSB(adr));
+                     n_cnt_sp++;
+                 }
+-            }
++	      }
++	      adri_epj.resize(n_cnt_ep);
++	      adri_spj.resize(n_cnt_sp);
++            }else{
++		#pragma omp parallel for
++		for(S32 i=0; i<adri_epj.size()+adri_spj.size(); i++){
++		  if(i<adri_epj.size()){
++		    S32 index = adri_epj[i].first;
++		    U32 adr = adri_epj[i].second;
++		    epj_sorted_[i] = epj_org_[adr];
++                    tp_glb_[index].adr_ptcl_ = i;
++		  }else{
++		    U32 ii = i-adri_epj.size();
++		    S32 index = adri_spj[ii].first;
++		    U32 adr = adri_epj[ii].second;
++		    spj_sorted_[ii] = spj_org_[adr];
++		    tp_glb_[index].adr_ptcl_ = SetMSB(ii);
++		  }
++		}
++	    }
+ #endif
+         }
+         else{
+diff --git a/src/tree_for_force_impl_force.hpp b/src/tree_for_force_impl_force.hpp
+index af3404b..2097b99 100644
+--- a/src/tree_for_force_impl_force.hpp
++++ b/src/tree_for_force_impl_force.hpp
+@@ -450,7 +450,9 @@ namespace ParticleSimulator{
+                            const S32 n_walk_limit,
+                            const bool flag_keep_list,
+                            const bool clear){
++        const F64 offset_initialize = GetWtime();
+         CalcForceMultiWalkInitialize(force_sorted_, n_loc_tot_, tag_max, clear);
++        time_profile_.clear_force += GetWtime() - offset_initialize;
+         S32 ret = 0;
+         const F64 time_offset = GetWtime();
+         ret = calcForceMultiWalkPtclImpl(typename TSM::force_type(),
+@@ -484,6 +486,7 @@ namespace ParticleSimulator{
+         const S32 n_ipg = ipg_.size();
+         if(n_ipg <= 0) return 0;
+         //n_walk_local_ += n_ipg;
++        const F64 offset_keep_list = GetWtime();
+         if(flag_keep_list){
+             interaction_list_.n_ep_.resizeNoInitialize(n_ipg);
+             interaction_list_.n_disp_ep_.resizeNoInitialize(n_ipg+1);
+@@ -492,6 +495,7 @@ namespace ParticleSimulator{
+             interaction_list_.n_disp_sp_.resizeNoInitialize(n_ipg+1);
+             interaction_list_.adr_sp_.clearSize();
+         }
++        time_profile_.calc_force__core__keep_list += GetWtime() - offset_keep_list;
+         const S32 n_loop_max = n_ipg/n_walk_limit + ((n_ipg%n_walk_limit)==0 ? 0 : 1);
+         ReallocatableArray<Tforce*> ptr_force_per_walk[2];
+         ReallocatableArray<S32> n_epi_per_walk[2];
+@@ -632,7 +636,9 @@ namespace ParticleSimulator{
+                 }
+                 time_profile_.calc_force__core__walk_tree += GetWtime() - offset_calc_force__core__walk_tree;
+                 if(!first_loop){
++                    const F64 offset_retrieve = GetWtime();
+                     ret += pfunc_retrieve(tag, n_walk_prev, n_epi_per_walk[lane_old].getPointer(), ptr_force_per_walk[lane_old].getPointer());
++                    time_profile_.calc_force__core__retrieve += GetWtime() - offset_retrieve;
+                 } // retrieve
+                 //pfunc_dispatch(0, n_walk, 
+                 //               (const Tepi**)ptr_epi_per_walk.getPointer(),   n_epi_per_walk[lane_now].getPointer(),
+@@ -641,14 +647,18 @@ namespace ParticleSimulator{
+                 //               epj_sorted_.getPointer(), epj_sorted_.size(),
+                 //               spj_sorted_.getPointer(), spj_sorted_.size(),
+                 //               false);
++                const F64 offset_dispatch = GetWtime();
+                 ret += pfunc_dispatch(tag, n_walk, 
+                                       (const Tepi**)ptr_epi_per_walk.getPointer(), n_epi_per_walk[lane_now].getPointer(), 
+                                       (const Tepj**)ptr_epj_per_walk.getPointer(), n_epj_per_walk.getPointer(), 
+                                       (const Tspj**)ptr_spj_per_walk.getPointer(), n_spj_per_walk.getPointer());
++                time_profile_.calc_force__core__dispatch += GetWtime() - offset_dispatch;
+                 first_loop = false;
+                 n_walk_prev = n_walk;
+             } // end of walk group loop
++            const F64 offset_retrieve = GetWtime();
+             ret += pfunc_retrieve(tag, n_walk_prev, n_epi_per_walk[(n_loop_max+1)%2].getPointer(), ptr_force_per_walk[(n_loop_max+1)%2].getPointer());
++            time_profile_.calc_force__core__retrieve += GetWtime() - offset_retrieve;
+             n_interaction_ep_ep_local_ += n_interaction_ep_ep_tmp;
+             n_interaction_ep_sp_local_ += n_interaction_ep_sp_tmp;
+         } // if(n_ipg > 0)
+@@ -660,6 +670,7 @@ namespace ParticleSimulator{
+         const F64 offset_copy_original_order = GetWtime();
+         copyForceOriginalOrder();
+         time_profile_.calc_force__copy_original_order += GetWtime() - offset_copy_original_order;
++        const F64 offset_other = GetWtime();
+         ptr_force_per_walk[0].freeMem();
+         ptr_force_per_walk[1].freeMem();
+         n_epi_per_walk[0].freeMem();
+@@ -670,6 +681,7 @@ namespace ParticleSimulator{
+         }
+         delete [] n_epj_disp_per_thread;
+         delete [] n_spj_disp_per_thread;
++        time_profile_.calc_force__other += GetWtime() - offset_other;
+         return ret;
+     }
+     //////////// Walk+Force, Kernel:Ptcl, List:Index Force:Short //////////////
+@@ -725,6 +737,7 @@ namespace ParticleSimulator{
+                 const F64 offset_calc_force__core__walk_tree = GetWtime();
+                 const S32 lane_now = wg%2;
+                 const S32 lane_old = (wg+1)%2;
++		const F64 offset_walk_tree = GetWtime();
+ #ifdef PARTICLE_SIMULATOR_THREAD_PARALLEL
+ #pragma omp parallel 
+ #endif
+@@ -775,6 +788,8 @@ namespace ParticleSimulator{
+                         ptr_epj_per_walk[iw] = epj_for_force_[ith].getPointer(n_epj_disp_per_thread[ith][iw_loc]);
+                     }
+                 } // end of OMP parallel scope
++		time_profile_.calc_force__core__walk_tree += GetWtime() - offset_walk_tree;
++		auto offset_keep_list = GetWtime();
+                 if(flag_keep_list){
+                     interaction_list_.n_disp_ep_[0] = 0;
+ #ifdef PARTICLE_SIMULATOR_THREAD_PARALLEL
+@@ -804,19 +819,25 @@ namespace ParticleSimulator{
+                         }
+                     }
+                 }
+-                time_profile_.calc_force__core__walk_tree += GetWtime() - offset_calc_force__core__walk_tree;
++		time_profile_.calc_force__core__keep_list += GetWtime() - offset_keep_list;
+                 
+                 if(!first_loop){
++		    auto offset_retrieve = GetWtime();
+                     ret += pfunc_retrieve(tag, n_walk_prev, n_epi_per_walk[lane_old].getPointer(), ptr_force_per_walk[lane_old].getPointer());
++		    time_profile_.calc_force__core__retrieve += GetWtime() - offset_retrieve;
+                 } // retrieve
++		auto offset_dispatch = GetWtime();
+                 ret += pfunc_dispatch(tag, n_walk, 
+                                       (const Tepi**)ptr_epi_per_walk.getPointer(), n_epi_per_walk[lane_now].getPointer(), 
+                                       (const Tepj**)ptr_epj_per_walk.getPointer(), n_epj_per_walk.getPointer()); // new
++		time_profile_.calc_force__core__dispatch += GetWtime() - offset_dispatch;
+                 
+                 first_loop = false;
+                 n_walk_prev = n_walk;
+             } // end of walk group loop
++	    auto offset_retrieve = GetWtime();
+             ret += pfunc_retrieve(tag, n_walk_prev, n_epi_per_walk[(n_loop_max+1)%2].getPointer(), ptr_force_per_walk[(n_loop_max+1)%2].getPointer());
++	    time_profile_.calc_force__core__retrieve += GetWtime() - offset_retrieve;
+             n_interaction_ep_ep_local_ += n_interaction_ep_ep_tmp;
+         } // if(n_ipg > 0)
+         else{
+@@ -1069,7 +1090,7 @@ namespace ParticleSimulator{
+                                         const S32 n_walk_limit,
+                                         const bool clear){
+ 
+-        //F64 time_offset = GetWtime();
++        F64 offset_core = GetWtime();
+         S32 ret = 0;
+         S32 tag = 0;
+         ReallocatableArray<Tepi*> epi_ar(n_walk_limit, n_walk_limit, MemoryAllocMode::Pool) ;
+@@ -1112,6 +1133,7 @@ namespace ParticleSimulator{
+         if(n_ipg > 0){
+             S32 n_walk=-1, n_walk_prev=-1, lane_0=-1, lane_1=-1;
+             for(int wg=0; wg<n_loop_max; wg++){
++                const F64 offset_copy_ep = GetWtime();
+                 n_walk = n_walk_ar[wg];
+                 n_walk_prev = (wg>0) ? n_walk_ar[wg-1] : 0;
+                 const S32 n_walk_head = n_disp_walk_ar[wg];
+@@ -1133,6 +1155,9 @@ namespace ParticleSimulator{
+                 const S64 n_ep_end  = interaction_list_.n_disp_ep_[n_walk_head+n_walk];
+                 const S64 n_epj_tot = n_ep_end - n_ep_head;
+                 epj_for_force_[0].resizeNoInitialize(n_epj_tot);
++#ifdef PARTICLE_SIMULATOR_THREAD_PARALLEL
++#pragma omp parallel for
++#endif
+                 for(S32 jp=0; jp<n_epj_tot; jp++){
+                     epj_for_force_[0][jp] = epj_sorted_[ interaction_list_.adr_ep_[jp+n_ep_head] ];
+                 }
+@@ -1140,6 +1165,9 @@ namespace ParticleSimulator{
+                 const S64 n_sp_end  = interaction_list_.n_disp_sp_[n_walk_head+n_walk];
+                 const S64 n_spj_tot = n_sp_end - n_sp_head;
+                 spj_for_force_[0].resizeNoInitialize(n_spj_tot);
++#ifdef PARTICLE_SIMULATOR_THREAD_PARALLEL
++#pragma omp parallel for
++#endif
+                 for(S32 jp=0; jp<n_spj_tot; jp++){
+                     spj_for_force_[0][jp] = spj_sorted_[ interaction_list_.adr_sp_[jp+n_sp_head] ];
+                 }
+@@ -1153,18 +1181,28 @@ namespace ParticleSimulator{
+                     n_epj_cnt += n_epj_ar[iw];
+                     n_spj_cnt += n_spj_ar[iw];
+                 }
++                time_profile_.calc_force__core__copy_ep += GetWtime() - offset_copy_ep;
+                 if(!first_loop){
++                    const F64 offset_retrieve = GetWtime();
+                     ret += pfunc_retrieve(tag, n_walk_prev, n_epi_ar[lane_1].getPointer(), force_ar[lane_1].getPointer());
++                    time_profile_.calc_force__core__retrieve += GetWtime() - offset_retrieve;
+                 }
++                const F64 offset_dispatch = GetWtime();
+                 ret += pfunc_dispatch(tag, n_walk, 
+                                       (const Tepi**)epi_ar.getPointer(), n_epi_ar[lane_0].getPointer(), 
+                                       (const Tepj**)epj_ar.getPointer(), n_epj_ar.getPointer(), 
+                                       (const Tspj**)spj_ar.getPointer(), n_spj_ar.getPointer());
++                time_profile_.calc_force__core__dispatch += GetWtime() - offset_dispatch;
+                 first_loop = false;
+             }
++            const F64 offset_retrieve = GetWtime();
+             ret += pfunc_retrieve(tag, n_walk, n_epi_ar[lane_0].getPointer(), force_ar[lane_0].getPointer());
++            time_profile_.calc_force__core__retrieve += GetWtime() - offset_retrieve;
+         }
++        time_profile_.calc_force__core += GetWtime() - offset_core;
++        F64 offset_copy = GetWtime();
+         copyForceOriginalOrder();
++        time_profile_.calc_force__copy_original_order += GetWtime() - offset_copy;
+         //time_profile_.calc_force += GetWtime() - time_offset;
+     }
+ 
+@@ -1236,6 +1274,7 @@ namespace ParticleSimulator{
+                 const S64 n_ep_head = interaction_list_.n_disp_ep_[n_walk_head];
+                 const S64 n_ep_end  = interaction_list_.n_disp_ep_[n_walk_head+n_walk];
+                 const S64 n_epj_tot = n_ep_end - n_ep_head;
++		auto offset_copy_ep = GetWtime();
+                 epj_for_force_[0].resizeNoInitialize(n_epj_tot);
+                 for(S32 jp=0; jp<n_epj_tot; jp++){
+                     epj_for_force_[0][jp] = epj_sorted_[ interaction_list_.adr_ep_[jp+n_ep_head] ];
+@@ -1246,16 +1285,23 @@ namespace ParticleSimulator{
+                     epj_ar[iw] = epj_for_force_[0].getPointer(n_epj_cnt);
+                     n_epj_cnt += n_epj_ar[iw];
+                 }
++		time_profile_.calc_force__core__copy_ep += GetWtime() - offset_copy_ep;
+                 if(!first_loop){
++		    auto offset_retrieve = GetWtime();
+                     ret += pfunc_retrieve(tag, n_walk_prev, n_epi_ar[lane_1].getPointer(), force_ar[lane_1].getPointer());
++		    time_profile_.calc_force__core__retrieve += GetWtime() - offset_retrieve;
+                 }
++		auto offset_dispatch = GetWtime();
+                 ret += pfunc_dispatch(tag, n_walk, 
+                                       (const Tepi**)epi_ar.getPointer(), n_epi_ar[lane_0].getPointer(), 
+                                       (const Tepj**)epj_ar.getPointer(), n_epj_ar.getPointer());
++		time_profile_.calc_force__core__dispatch += GetWtime() - offset_dispatch;
+                 first_loop = false;
+ 
+             }
++	    auto offset_retrieve = GetWtime();
+             ret += pfunc_retrieve(tag, n_walk, n_epi_ar[lane_0].getPointer(), force_ar[lane_0].getPointer());
++	    time_profile_.calc_force__core__retrieve += GetWtime() - offset_retrieve;
+         }
+ 	time_profile_.calc_force__core += GetWtime() - time_offset;
+ 	const F64 offset_copy_original_order = GetWtime();
+@@ -1311,7 +1357,9 @@ namespace ParticleSimulator{
+             ni_ave_ = nj_ave_ = n_interaction_ep_ep_ = 0;
+             n_walk_local_ = n_interaction_ep_ep_local_ = 0;
+         }
++        const F64 offset_copy_original_order = GetWtime();
+         copyForceOriginalOrder();
++        time_profile_.calc_force__copy_original_order += GetWtime() - offset_copy_original_order;
+         
+ #ifdef PARTICLE_SIMULATOR_DEBUG_PRINT
+         PARTICLE_SIMULATOR_PRINT_LINE_INFO();
+@@ -1554,7 +1602,9 @@ namespace ParticleSimulator{
+             ni_ave_ = nj_ave_ = n_interaction_ep_ep_ = n_interaction_ep_sp_ = 0;
+             n_interaction_ep_ep_local_ = n_interaction_ep_sp_local_ = 0;
+         }
++        const F64 offset_copy_original_order = GetWtime();
+         copyForceOriginalOrder();
++        time_profile_.calc_force__copy_original_order += GetWtime() - offset_copy_original_order;
+ #ifdef PARTICLE_SIMULATOR_DEBUG_PRINT
+         PARTICLE_SIMULATOR_PRINT_LINE_INFO();
+         std::cout<<"ipg_.size()="<<ipg_.size()<<std::endl;
+@@ -1637,7 +1687,7 @@ namespace ParticleSimulator{
+     void TreeForForce<TSM, Tforce, Tepi, Tepj, Tmomloc, Tmomglb, Tspj, CALC_DISTANCE_TYPE>::
+     calcForceNoWalk(Tfunc_ep_ep pfunc_ep_ep,
+                     const bool clear){
+-        F64 time_offset = GetWtime();
++        F64 time_offset_clear_force = GetWtime();
+         force_sorted_.resizeNoInitialize(n_loc_tot_);
+         //force_org_.resizeNoInitialize(n_loc_tot_);
+         if(clear){
+@@ -1648,13 +1698,19 @@ namespace ParticleSimulator{
+                 force_sorted_[i].clear();
+             }
+         }
++	time_profile_.clear_force += GetWtime() - time_offset_clear_force;
++        F64 time_offset = GetWtime();
+         S64 n_interaction_ep_ep_tmp = 0;
+         const S64 n_ipg = ipg_.size();
++	const S32 nth = Comm::getNumThreads();
++	F64 time_kernel[nth],time_copy_ep[nth], time_wait[nth];
++	for(int i=0;i<nth;i++) time_kernel[i] = time_copy_ep[i] = 0.0;
+         if(n_ipg > 0){
+ #ifdef PARTICLE_SIMULATOR_THREAD_PARALLEL
+ #pragma omp parallel for schedule(dynamic, 4) reduction(+ : n_interaction_ep_ep_tmp)
+ #endif
+             for(S32 i=0; i<n_ipg; i++){
++		F64 offset = GetWtime();
+                 const S32 ith = Comm::getThreadNum();
+                 const S32 n_epi = ipg_[i].n_ptcl_;
+                 const S32 adr_epi_head = ipg_[i].adr_ptcl_;
+@@ -1668,13 +1724,27 @@ namespace ParticleSimulator{
+                     const S32 adr_epj = interaction_list_.adr_ep_[j];
+                     epj_for_force_[ith][n_cnt] = epj_sorted_[adr_epj];
+                 }
++		time_copy_ep[ith] += GetWtime() - offset;
++		const F64 offset_ep_ep = GetWtime();
+                 pfunc_ep_ep(epi_sorted_.getPointer(adr_epi_head),     n_epi,
+                             epj_for_force_[ith].getPointer(),   n_epj,
+                             force_sorted_.getPointer(adr_epi_head));
++		time_kernel[ith] += GetWtime() - offset_ep_ep;
+             }
+         }
++	F64 time_calc_force__core = GetWtime() - time_offset;
++	F64 sum_kernel = 0.0, sum_copy_ep = 0.0;
++	for(int i=0;i<nth;i++){
++	  sum_kernel += time_kernel[i];
++	  sum_copy_ep += time_copy_ep[i];
++	}
++	time_profile_.calc_force__core__kernel += time_calc_force__core * (sum_kernel / (nth*time_calc_force__core));
++	time_profile_.calc_force__core__copy_ep += time_calc_force__core * (sum_copy_ep / (nth*time_calc_force__core));
++        time_profile_.calc_force__core += time_calc_force__core;
+         n_interaction_ep_ep_local_ += n_interaction_ep_ep_tmp;
++        const F64 offset_copy_original_order = GetWtime();
+         copyForceOriginalOrder();
++        time_profile_.calc_force__copy_original_order += GetWtime() - offset_copy_original_order;
+         time_profile_.calc_force += GetWtime() - time_offset;
+     }
+ 
+@@ -1686,7 +1756,7 @@ namespace ParticleSimulator{
+     calcForceNoWalk(Tfunc_ep_ep pfunc_ep_ep,
+                     Tfunc_ep_sp pfunc_ep_sp,
+                     const bool clear){
+-        F64 time_offset = GetWtime();
++        F64 time_offset_clear_force = GetWtime();
+         force_sorted_.resizeNoInitialize(n_loc_tot_);
+         if(clear){
+ #ifdef PARTICLE_SIMULATOR_THREAD_PARALLEL
+@@ -1696,14 +1766,20 @@ namespace ParticleSimulator{
+                 force_sorted_[i].clear();
+             }
+         }
++	time_profile_.clear_force += GetWtime() - time_offset_clear_force;
++        F64 time_offset = GetWtime();
+         S64 n_interaction_ep_ep_tmp = 0;
+         S64 n_interaction_ep_sp_tmp = 0;
+         const S64 n_ipg = ipg_.size();
++	const S32 nth = Comm::getNumThreads();
++	F64 time_kernel[nth],time_copy_ep[nth], time_wait[nth];
++	for(int i=0;i<nth;i++) time_kernel[i] = time_copy_ep[i] = 0.0;
+         if(n_ipg > 0){
+ #ifdef PARTICLE_SIMULATOR_THREAD_PARALLEL
+-#pragma omp parallel for schedule(dynamic, 4) reduction(+ : n_interaction_ep_ep_tmp, n_interaction_ep_sp_tmp)
++#pragma omp parallel for schedule(dynamic, 4)
+ #endif
+             for(S32 i=0; i<n_ipg; i++){
++		F64 offset = GetWtime();
+                 const S32 ith = Comm::getThreadNum();
+                 const S32 n_epi = ipg_[i].n_ptcl_;
+                 const S32 adr_epi_head = ipg_[i].adr_ptcl_;
+@@ -1713,8 +1789,6 @@ namespace ParticleSimulator{
+                 const S32 n_spj = interaction_list_.n_sp_[i];
+                 const S32 adr_spj_head = interaction_list_.n_disp_sp_[i];
+                 const S32 adr_spj_end  = interaction_list_.n_disp_sp_[i+1];
+-                n_interaction_ep_ep_tmp += ipg_[i].n_ptcl_ * n_epj;
+-                n_interaction_ep_sp_tmp += ipg_[i].n_ptcl_ * n_spj;
+                 epj_for_force_[ith].resizeNoInitialize(n_epj);
+                 spj_for_force_[ith].resizeNoInitialize(n_spj);
+                 S32 n_ep_cnt = 0;
+@@ -1722,9 +1796,13 @@ namespace ParticleSimulator{
+                     const S32 adr_epj = interaction_list_.adr_ep_[j];
+                     epj_for_force_[ith][n_ep_cnt] = epj_sorted_[adr_epj];
+                 }
++		time_copy_ep[ith] += GetWtime() - offset;
++		const F64 offset_ep_ep = GetWtime();
+                 pfunc_ep_ep(epi_sorted_.getPointer(adr_epi_head),     n_epi,
+                             epj_for_force_[ith].getPointer(),   n_epj,
+                             force_sorted_.getPointer(adr_epi_head));
++		time_kernel[ith] += GetWtime() - offset_ep_ep;
++		offset = GetWtime();
+                 S32 n_sp_cnt = 0;
+ #if 0
+                 // must use this combinig with AddMomentAsSpImpl()
+@@ -1743,14 +1821,33 @@ namespace ParticleSimulator{
+                     }
+                 }
+ #endif
++		time_copy_ep[ith] += GetWtime() - offset;
++		const auto offset_ep_sp = GetWtime();
+                 pfunc_ep_sp(epi_sorted_.getPointer(adr_epi_head),     n_epi,
+                             spj_for_force_[ith].getPointer(),   n_spj,
+                             force_sorted_.getPointer(adr_epi_head));
++		time_kernel[ith] += GetWtime() - offset_ep_sp;
+             }
+         }
+-        n_interaction_ep_ep_local_ += n_interaction_ep_ep_tmp;
+-        n_interaction_ep_sp_local_ += n_interaction_ep_sp_tmp;
++	F64 time_calc_force__core = GetWtime() - time_offset;
++	F64 sum_kernel = 0.0, sum_copy_ep = 0.0;
++	for(int i=0;i<nth;i++){
++	  sum_kernel += time_kernel[i];
++	  sum_copy_ep += time_copy_ep[i];
++	}
++	time_profile_.calc_force__core__kernel += time_calc_force__core * (sum_kernel / (nth*time_calc_force__core));
++	time_profile_.calc_force__core__copy_ep += time_calc_force__core * (sum_copy_ep / (nth*time_calc_force__core));
++        time_profile_.calc_force__core += time_calc_force__core;
++	for(int i=0;i<n_ipg;i++){
++          const S32 n_epi = ipg_[i].n_ptcl_;
++          const S32 n_epj = interaction_list_.n_ep_[i];
++          const S32 n_spj = interaction_list_.n_sp_[i];
++          n_interaction_ep_ep_local_ += n_epi * n_epj;
++          n_interaction_ep_sp_local_ += n_epi * n_spj;
++	}
++        const F64 offset_copy_original_order = GetWtime();
+         copyForceOriginalOrder();
++        time_profile_.calc_force__copy_original_order += GetWtime() - offset_copy_original_order;
+         time_profile_.calc_force += GetWtime() - time_offset;
+     }
+     
+diff --git a/src/tree_for_force_utils.hpp b/src/tree_for_force_utils.hpp
+index 3ce12f1..a0bf274 100644
+--- a/src/tree_for_force_utils.hpp
++++ b/src/tree_for_force_utils.hpp
+@@ -264,6 +264,7 @@ namespace ParticleSimulator{
+         }
+         return -1;
+     }
++#if 0
+     template<class Ttp>
+     inline S32 GetPartitionIDnew(const Ttp tp[], // slightly faster on X86 but not on Fugaku...
+                               const S32 left,
+@@ -280,7 +281,7 @@ namespace ParticleSimulator{
+ 	    return GetPartitionIDsub<Ttp,1> (tp, left,right, ref, levarg,morton_key);
+ 	}
+     }
+-	    
++#endif
+ #endif
+   
+     template<class Ttc>
