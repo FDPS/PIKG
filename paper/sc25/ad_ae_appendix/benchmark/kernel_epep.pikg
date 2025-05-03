@@ -1,0 +1,8 @@
+rij = EPI.pos - EPJ.pos
+r2 = rij * rij + 0.0009765625f
+r_inv  = rsqrt(r2)
+r2_inv = r_inv * r_inv
+mr_inv  = EPJ.mass * r_inv
+mr3_inv = r2_inv * mr_inv
+FORCE.acc -= mr3_inv * rij
+FORCE.pot -= mr_inv
