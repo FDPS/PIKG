@@ -2,9 +2,8 @@
 
 set -x
 
-PIKG_ROOT=../PIKG
-FDPS_ROOT=../FDPS
-PFCOMP_ROOT=/opt/pfn/pfcomp
+PIKG_ROOT=../../../..
+FDPS_ROOT=$HOME/FDPS
 
 export OMP_NUM_THREADS=20
 export OMP_SCHEDULE=static
@@ -21,7 +20,7 @@ fig_dir=$measurement_dir/fig
 mkdir -p $log_dir $fig_dir
 
 nptcl=$((896*256))
-PIKG_ROOT=$PIKG_ROOT use_pikg_mncore2=yes make -B
+PIKG_ROOT=$PIKG_ROOT FDPS_ROOT=$FDPS_ROOT use_pikg_mncore2=yes make -B
 for n in 64 128 256 512 1024 2048 4096 8192; do
 numactl -C 0-$(($OMP_NUM_THREADS - 1)) --localalloc ./nbody.out -N $nptcl -n $n -l 64 -w 1024 -t 0.5 -T 0.125 > $log_dir/n${nptcl}_ng${n}_l64.log
 done
