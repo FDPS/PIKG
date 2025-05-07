@@ -4,15 +4,15 @@
 
 set -x
 
-PIKG_ROOT=../PIKG
-FDPS_ROOT=../FDPS
+PIKG_ROOT=../../../../
+FDPS_ROOT=$HOME/FDPS
 
 export NTHREADS=6
 export KMP_AFFINITY=verbose,compact
 export KMP_HW_SUBSET=${NTHREADS}c,1t
 
 nptcl=$((896*256))
-PIKG_ROOT=$PIKG_ROOT use_pikg_avx2=yes make -B
+PIKG_ROOT=$PIKG_ROOT FDPS_ROOT=$FDPS_ROOT use_pikg_avx2=yes make -B
 
 measurement_dir=measurements
 log_dir=$measurement_dir/CPU/logs
