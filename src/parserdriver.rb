@@ -117,10 +117,40 @@ def generate_force_related_map(ss,h=$varhash,fvars=[])
     if isStatement(s)
       name = get_name(s)
       next if h[name][3] == "local"
-      if h[name][0] == "FORCE"
+      iotype = h[name][0]
+      if iotype == "FORCE"
         fvars += [name]
       end
-      if h[name][0] == "FORCE" || fvars.index(name)
+      if iotype == "FORCE" || fvars.index(name)
+        rexps = s.expression.get_related_variable
+        rexps.each{ |rexp|
+          if rexp.class == Expression && rexp.operator == :dot
+            fvars += [rexp.lop]
+          else
+            fvars += [rexp]
+          end
+        }
+      end
+    elsif s.class == ConditionalBranch
+      s.conditions.zip(s.bodies){ |c,b|
+        fvars += generate_force_related_map(b,h,fvars)
+        fvars += c.get_related_variable
+      }
+    end
+  }
+  ret = fvars.sort.uniq
+  ret
+end
+
+def generate_force_related_map_for_device(ss,h=$varhash,fvars=[])
+  ss.reverse_each{ |s|
+    if isStatement(s)
+      name = get_name(s)
+      iotype = h[name][0]
+      if iotype == "FORCE"
+        fvars += [name]
+      end
+      if iotype == "FORCE" || fvars.index(name)
         rexps = s.expression.get_related_variable
         rexps.each{ |rexp|
           if rexp.class == Expression && rexp.operator == :dot
@@ -1498,7 +1528,7 @@ class String
       self
     end
   end
-  def replace_fdpsname_recursive(h=$varhash)
+  def replace_fdpsname_recursive(h=$varhash,multiwalk=false)
     name = self.dup
     ret = name
     return ret if h[name] == nil
@@ -1508,7 +1538,11 @@ class String
     if iotype != nil && fdpsname != nil
       op = "i" if iotype == "EPI" || iotype == "FORCE"
       op = "j" if iotype == "EPJ"
-      ret = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),op]),fdpsname,type])
+      if multiwalk
+        ret = Expression.new([:dot,Expression.new([:array,Expression.new([:array,get_iotype_array(iotype),"iw"]),op]),fdpsname,type])
+      else
+        ret = Expression.new([:dot,Expression.new([:array,get_iotype_array(iotype),op]),fdpsname,type])
+      end
     end
     ret
   end
