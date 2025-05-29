@@ -696,6 +696,7 @@ class Kernelprogram
     code += "  const int   *id_epj,\n"
     code += "  const EpjGPUIndex *epj,\n"
     code += "        EpjGPU *dev_epj,\n"
+    code += member_decls + ",\n"
     code += "  const int nmax){\n"
     code += "  const int index = blockIdx.x * blockDim.x + threadIdx.x;\n"
     code += "  const int iw = index / nmax;\n"
