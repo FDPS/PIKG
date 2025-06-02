@@ -22,8 +22,6 @@ while len(sys.argv) > 0:
         # can't reach
         print(f"error: unsupported option {opt}")
         raise AssertionError()
-os.environ["ASM"] = "/Users/subarutaro/work/pfcomp/gpfn2/assembler/asm"
-os.environ["PACKER"] = "/Users/subarutaro/work/pfcomp/gpfn2/emulator/build/grape_pfn/packer/packer_main"
 
 fl72 = lambda v:hex(struct.unpack('>Q', struct.pack('>d', v))[0]).split("x")[1]+"00"
 
@@ -67,9 +65,6 @@ for insts in core_instlist_head:
 
 is_multi_prec = (max_inst_prec != min_inst_prec)
 
-
-#NI, NJ= 256, 4
-#NI, NJ = 512, 2 # NIpL1B, NJpPE
 simd_width=64//min_inst_prec
 ni_per_loop = simd_width*cycle_per_step
 nj_per_loop = simd_width
@@ -77,8 +72,9 @@ NI = ((LMEM_SIZE-LMEM_BANK_OFFSET) // (max(io_size[0],io_size[2])//SW_BIT_SIZE) 
 if max_subwalk_size > 0:
     NI = min( NI, simd_width*max_subwalk_size )
 NI = (NI//(simd_width*l2bm_chunk_size))*(simd_width*l2bm_chunk_size) # NI must be multiple of simd_width*l2bm_chunk_size
-#NJ = 2 if min_element_size == 64 else 4
-NJ = ((min((GRF_SIZE-GRF_BANK_OFFSET) // (SW_IN_LW*(io_size[1]//SW_BIT_SIZE)), DRAM_OFFSET_SIZE // (SW_IN_LW*(io_size[1]//SW_BIT_SIZE)*num_pe)))//simd_width)*simd_width
+NJ = min( (GRF_SIZE-GRF_BANK_OFFSET) // (SW_IN_LW*(io_size[1]//SW_BIT_SIZE)), 
+          DRAM_OFFSET_SIZE // (SW_IN_LW*(io_size[1]//SW_BIT_SIZE)*num_pe) )
+NJ = (NJ//(4*simd_width))*(4*simd_width)
 
 #print("ChX:",ChI,ChJ,ChF)
 #print("(NI,NJ):",NI,NJ)
@@ -92,9 +88,11 @@ FORCE_OFFSET[0] = LMEM_BANK_OFFSET
 DRAM_EPI_OFFSET   = [ 0 for i in range(ChI+1) ]
 DRAM_EPJ_OFFSET   = [ 0 for i in range(ChJ+1) ]
 DRAM_FORCE_OFFSET = [ 0 for i in range(ChF+1) ]
+DRAM_IDEPJ_OFFSET   = [ 0 for i in range(ChJ+1) ]
 DRAM_EPI_OFFSET[0] = 0
 DRAM_EPJ_OFFSET[0] = DRAM_IN_J_OFFSET
 DRAM_FORCE_OFFSET[0] = DRAM_OUT_OFFSET
+DRAM_IDEPJ_OFFSET[0] = DRAM_IN_J_OFFSET
 for i in range(len(var_type_list[0])):
     var=var_type_list[0][i][0]
     tp=var_type_list[0][i][1]
@@ -105,8 +103,10 @@ for i in range(len(var_type_list[0])):
 for i in range(len(var_type_list[1])):
     var=var_type_list[1][i][0]
     tp=var_type_list[1][i][1]
+    width=64//int(tp[1:3])
     EPJ_OFFSET[i+1] = EPJ_OFFSET[i] + NJ*(int(tp[1:3])//32)
-    DRAM_EPJ_OFFSET[i+1] = DRAM_EPJ_OFFSET[i] + num_l1b * (NJ*num_pe_per_mab*num_mab_per_l1b//(64//int(tp[1:3])))
+    DRAM_EPJ_OFFSET[i+1] = DRAM_EPJ_OFFSET[i] + num_l1b * (NJ*num_pe_per_mab*num_mab_per_l1b//width)
+    DRAM_IDEPJ_OFFSET[i+1] = DRAM_IDEPJ_OFFSET[i] + (num_l1b * (num_pe_per_mab*num_mab_per_l1b) * (NJ//width)) // (16*SW_IN_LW)
     if(EPJ_OFFSET[i+1]%2 != 0):
         EPJ_OFFSET[i+1] += 1
 for i in range(len(var_type_list[2])):
@@ -519,6 +519,51 @@ def gen_Sub( regs_dic, NI, NJ, ISX=True, dstart=0):
             DRAM2LOCAL_EPJ(codeS,dram_offset=doffset, dram_increment_per_l2b= num_pe_per_l2b, localmem_offset= lmem_offset, target_localmem="r")
     return codeS
 
+def DRAM2LOCAL_EPJ_Indirect(code,dar_offset,dram_increment_per_l2b,localmem_offset,nd,target_localmem="n"):
+    #Send an element per PE from DRAM to localmem with indirect access.
+    #This operation send 1LW per PE, 4LW per MAB, 4*16LW per L1B, 4*16*8LW per L2B, 4*16*8*8LW per Device.
+    #This requires to set 'target_localmem' as 'm' or 'n'
+    for group_id in range(num_group):
+        for l2b_id in range(num_l2b_per_group):
+            index = num_l2b_per_group * group_id + l2b_id
+            tag = "i" + format(index+1,'02x')
+            code[f'mvp/n{dram_increment_per_l2b}{tag}nd{nd} $di{dar_offset+(dram_increment_per_l2b//16)*index}@0 $lc0@{group_id}.{l2b_id}' ]
+            code[f'nop; wait {tag}']
+
+    [ code[f"l2bmb@{l1b_id} $lc{l2bm_chunk_size*l1b_id} $lb{0}"] for l1b_id in range(num_l1b_per_l2b) ]
+    [ code['nop'] for i in range(4)]
+    code[f"l1bmd $lb{0} $l{target_localmem}{localmem_offset}/1000"]
+
+def gen_Sub_indirect( regs_dic, NI, NJ, ISX=True, dstart=0):
+    offset = dstart + (0 if not ISX else DRAM_OFFSET_SIZE)
+    num_entry = 1024 # dar has 1024 entry in SW, 16 LW for an entry
+    num_block_per_dar = num_entry * 16 // num_pe # 256
+    codeS = Code()
+    for c in range(ChJ):
+        codeS[f"# copy {var_type_list[1][c][0]} (EPJ{c}) "]
+        tp = var_type_list[1][c][1]
+        size = int(tp[1:])
+        interval = 64//size
+        # indices of 2 LW (= 4 sw entry) for 64 LW copy is required for each L1B.
+        for j in range(0,NJ,num_block_per_dar*interval):
+            doffset = offset + DRAM_IDEPJ_OFFSET[c] + num_entry//SW_IN_LW*(j//(num_block_per_dar*interval))
+            codeS[f'mvp/n{num_entry//SW_IN_LW}i01 $d{doffset}@0 $lc0@0.0']
+            codeS['nop; wait i01']
+            codeS['l2bmdars $lc0@.0 $dar0; l2bmdarw']
+            for i in range(127):
+                codeS['l2bmdarw']
+            codeS['nop']
+            codeS['l2bmdars $lc256@.0 $dar512; l2bmdarw']
+            for i in range(127):
+                codeS['l2bmdarw']
+            codeS['nop']
+            for k in range(0, num_block_per_dar):
+                if j+interval*k >= NJ:
+                    break
+                lmem_offset = getEpjRegAddress(j+interval*k,c,not ISX)
+                DRAM2LOCAL_EPJ_Indirect(codeS,dar_offset=(num_pe//16)*k, dram_increment_per_l2b= num_pe_per_l2b, localmem_offset= lmem_offset, nd=size//min_element_size, target_localmem="r")
+    return codeS
+
 def overlap_pe_alu_inst(code):
     assert False # under construction
     codeA = Code()
@@ -600,7 +645,11 @@ def Merge_MS ( codeM, codeS ):
         if len(opM_list)==0 or len(opS_list)==0: #either list is empty!
             break
         opM = opM_list.pop()
+        while opM[0][0] == '#':
+            opM = opM_list.pop()
         opS = opS_list.pop()
+        while opS[0][0] == '#':
+            opS = opS_list.pop()
         doWait = True if ('wait' in opS[0]) and (mv_timer <= 0) else False
         waitOp = opS[0].split(';')[1] if doWait else ''
         if doWait:
@@ -739,6 +788,7 @@ def LOCAL2DRAM_FORCE(code,dram_offset,dram_increment_per_l2b, target_localmem, e
 
     for j in range(nloop) :
         [ code[f"l2bm@{l1b_id} $lb{l2bm_chunk_size*j} $lc{nloop*l2bm_chunk_size*l1b_id + l2bm_chunk_size*j}"] for l1b_id in range(8) ] #L2BM write 64x4x8
+    code["nop/7"]
 
     for group_id in range(num_group):
         for l2b_id in range(num_l2b_per_group):
@@ -751,7 +801,7 @@ def LOCAL2DRAM_FORCE(code,dram_offset,dram_increment_per_l2b, target_localmem, e
 def double_to_hex(f):
     return hex(struct.unpack('<Q', struct.pack('<d', f))[0])
 
-def gen_Head(regs_dic, NI, NJ, offset):
+def gen_Head(regs_dic, NI, NJ, offset, isIndirect = False):
     
     codeA = Code()
     
@@ -818,24 +868,15 @@ def gen_Head(regs_dic, NI, NJ, offset):
             codeA[f'lpassa $aluf $l{loc}{addr}v2']
         else:
             assert False
-            
+
     [codeA["nop"] for i in range(4)]
     #print ( "@", len(codeA.ops) )
 
-    # first NJ transfer
-    for c in range(ChJ):
-        codeA[f"# copy {var_type_list[1][c][0]} (EPJ{c}) "]
-        tp = var_type_list[1][c][1]
-        size = int(tp[1:])
-        interval = 64//size
-        for j in range(0,NJ,interval):
-            lmem_offset = getEpjRegAddress(j,c,True)
-            # data on dram are in order below:
-            # nj[0][0], ... , nj[0][NJ*num_pe], nj[1][0], ... , nj[1][NJ*num_pe], ... , nj[ChJ-1][0], ...
-            doffset = offset + DRAM_EPJ_OFFSET[c] + num_pe*j//interval
-            assert doffset < offset + DRAM_IN_J_OFFSET + DRAM_OFFSET_SIZE
-            codeA[f"#DRAM2LOCAL_EPJ c={c} j={j} dram_offset={doffset} lmem_offset={lmem_offset}"]
-            DRAM2LOCAL_EPJ(codeA,dram_offset=doffset, dram_increment_per_l2b= num_pe_per_l2b, localmem_offset= lmem_offset,target_localmem="r")
+    codeA['#Copy first EPJ']
+    if isIndirect:
+        codeA = codeA + gen_Sub_indirect(regs_dic, NI, NJ, False, offset)
+    else:
+        codeA = codeA + gen_Sub(regs_dic, NI, NJ, False, offset)
 
     return codeA
 
@@ -851,6 +892,7 @@ def gen_Tail(regs_dic, NI, NJ, offset):
         doffset = offset + DRAM_FORCE_OFFSET[c]
         codeA[f"#LOCAL2DRAM_FORCE c={c} dram_offset={doffset}"]
         LOCAL2DRAM_FORCE(codeA, dram_offset=doffset, dram_increment_per_l2b=num_l1b_per_l2b*(NI//simd),target_localmem="n", element_size=var_type_list[2][c][1], c=c, simd=simd, nloop=nloop)
+        codeA["nop/7"]
     #print ( "@", len(codeA.ops) )
 
     return codeA
@@ -860,13 +902,17 @@ for i in range(min(DRAM_SIZE//DRAM_KERNEL_OFFSET,MAX_KERNEL_LAUNCH)):
     ISX = True
     codeM = gen_Main(core_instlist_head, regs_dic, NI=NI, NJ= NJ, ISX=ISX)
     codeS = gen_Sub( regs_dic, NI=NI, NJ= NJ, ISX=ISX, dstart=offset)
+    codeSI = gen_Sub_indirect( regs_dic, NI=NI, NJ= NJ, ISX=ISX, dstart=offset)
     codeMS = Merge_MS(codeM,codeS)
+    codeMSI = Merge_MS(codeM,codeSI)
     #codeMS = cat_MS(codeM,codeS)
 
     ISX = False
     codeMr = gen_Main(core_instlist_head, regs_dic, NI=NI, NJ= NJ, ISX=ISX)
     codeSr = gen_Sub( regs_dic, NI=NI, NJ= NJ, ISX=ISX, dstart=offset)
+    codeSIr = gen_Sub_indirect( regs_dic, NI=NI, NJ= NJ, ISX=ISX, dstart=offset)
     codeMSr = Merge_MS(codeMr,codeSr)
+    codeMSIr = Merge_MS(codeMr,codeSIr)
     #codeMSr = cat_MS(codeMr,codeSr)
 
     name = f"packs/nbY1_MS{i}"
@@ -875,12 +921,20 @@ for i in range(min(DRAM_SIZE//DRAM_KERNEL_OFFSET,MAX_KERNEL_LAUNCH)):
     name = f"packs/nbY1_MSR{i}"
     WriteTextCode(  ToTextCode(codeMSr) , name=name )
 
+    name = f"packs/nbY1_MSI{i}"
+    WriteTextCode(  ToTextCode(codeMSI) , name=name )
+
+    name = f"packs/nbY1_MSIR{i}"
+    WriteTextCode(  ToTextCode(codeMSIr) , name=name )
     #print ( len(codeM.ops), len(codeS.ops), len(codeMS.ops) )
 
-    codeH = gen_Head( regs_dic, NI, NJ, offset)
+    codeH = gen_Head( regs_dic, NI, NJ, offset, False)
     name = f"packs/nbY1_H{i}"
     WriteTextCode(  ToTextCode(codeH)  , name=name )
     #print ( len(codeH.ops) )
+    codeH = gen_Head( regs_dic, NI, NJ, offset, True)
+    name = f"packs/nbY1_HI{i}"
+    WriteTextCode(  ToTextCode(codeH)  , name=name )
 
     codeT = gen_Tail( regs_dic, NI, NJ, offset)
     name = f"packs/nbY1_MT{i}"

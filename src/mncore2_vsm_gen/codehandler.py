@@ -34,6 +34,10 @@ class Code:
         else:
             op,mask,vlen,sole = item,"mask 0",4,False
         me.ops.append( [op.strip(" ").strip("\n").strip(" "),mask,vlen,sole] )
+    def __add__(me,other):
+        ret = Code()
+        ret.ops = me.ops + other.ops
+        return ret
         
 def ToTextCode(code):
     text = ""
