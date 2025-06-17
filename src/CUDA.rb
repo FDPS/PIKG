@@ -703,7 +703,7 @@ class Kernelprogram
     code += "  const int start_i = ij_disp[iw].x;\n"
     code += "  const int iii = start_i + tid;\n"
     code += "  const EpiGPUIndex *epi = epi_orig + start_i;\n"
-    code += "  if(tid < ij_disp[iw+1].x - ij_disp[iw]){\n"
+    code += "  if(tid < ij_disp[iw+1].x - ij_disp[iw].x){\n"
     code += "    const int i = tid;\n"
     # local vars
     fvars.each{ |v|
@@ -730,7 +730,7 @@ class Kernelprogram
 
     code += "  const int start_j = ij_disp[iw].y;\n"
     code += "  const int jjj = start_j + tid;\n"
-    code += "  if(tid < ij_disp[iw+1].y - ij_disp[iw]){\n"
+    code += "  if(tid < ij_disp[iw+1].y - ij_disp[iw].y){\n"
     code += "    const int j = id_epj[jjj];\n"
     # local vars
     fvars.each{ |v|
