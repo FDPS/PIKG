@@ -920,7 +920,7 @@ class Kernelprogram
     code += "#ifdef PIKG_MEASURE_CUDA_KERNEL_TIME\n"
     code += "  prof.start(\"Kernel\");\n"
     code += "#endif\n"
-    code += "  #{$kernel_name}_generate_ep_cuda <<< nwalk, std::max(ni_max,nj_max) >>> (ij_disp, walk,  dev_epi_index, dev_epi, dev_id_epj, dev_epj_index, dev_epj"
+    code += "  #{$kernel_name}_generate_ep_cuda <<< n_walk, std::max(ni_max,nj_max) >>> (ij_disp, walk,  dev_epi_index, dev_epi, dev_id_epj, dev_epj_index, dev_epj"
     $varhash.each{|v|
       iotype = v[1][0]
       if iotype == "MEMBER"
