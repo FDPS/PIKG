@@ -696,16 +696,15 @@ class Kernelprogram
     code += "  const int   *id_epj,\n"
     code += "  const EpjGPUIndex *epj,\n"
     code += "        EpjGPU *dev_epj"
-    code += member_decls + ",\n"
-    code += "  const int nmax){\n"
-    code += "  const int index = blockIdx.x * blockDim.x + threadIdx.x;\n"
-    code += "  const int iw = index / nmax;\n"
+    code += member_decls + "){\n"
+    code += "  const int tid = threadIdx.x;\n"
+    code += "  const int iw = blockIdx.x;\n"
 
     code += "  const int start_i = ij_disp[iw].x;\n"
-    code += "  const int iii = start_i + (index % nmax);\n"
+    code += "  const int iii = start_i + tid;\n"
     code += "  const EpiGPUIndex *epi = epi_orig + start_i;\n"
-    code += "  if(iii < ij_disp[iw+1].x){\n"
-    code += "    const int i = index % nmax;\n"
+    code += "  if(tid < ij_disp[iw+1].x - ij_disp[iw]){\n"
+    code += "    const int i = tid;\n"
     # local vars
     fvars.each{ |v|
       iotype = h[v][0]
@@ -730,8 +729,8 @@ class Kernelprogram
     code += "  }\n"
 
     code += "  const int start_j = ij_disp[iw].y;\n"
-    code += "  const int jjj = start_j + (index % nmax);\n"
-    code += "  if(jjj < ij_disp[iw+1].y){\n"
+    code += "  const int jjj = start_j + tid;\n"
+    code += "  if(tid < ij_disp[iw+1].y - ij_disp[iw]){\n"
     code += "    const int j = id_epj[jjj];\n"
     # local vars
     fvars.each{ |v|
@@ -921,7 +920,7 @@ class Kernelprogram
     code += "#ifdef PIKG_MEASURE_CUDA_KERNEL_TIME\n"
     code += "  prof.start(\"Kernel\");\n"
     code += "#endif\n"
-    code += "  #{$kernel_name}_generate_ep_cuda <<<std::max(nblocks,nblocks_j), N_THREAD_GPU>>> (ij_disp, walk,  dev_epi_index, dev_epi, dev_id_epj, dev_epj_index, dev_epj"
+    code += "  #{$kernel_name}_generate_ep_cuda <<< nwalk, std::max(ni_max,nj_max) >>> (ij_disp, walk,  dev_epi_index, dev_epi, dev_id_epj, dev_epj_index, dev_epj"
     $varhash.each{|v|
       iotype = v[1][0]
       if iotype == "MEMBER"
@@ -929,7 +928,7 @@ class Kernelprogram
         code += ",#{name}"
       end
     }
-    code += ", std::max(nj_max,ni_max));\n"
+    code += ");\n"
     code += "  #{$kernel_name}_cuda <<<nblocks, nthreads>>> (ij_disp, walk,  dev_epi, dev_epj, dev_force"
     $varhash.each{|v|
       iotype = v[1][0]
