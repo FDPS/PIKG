@@ -696,15 +696,16 @@ class Kernelprogram
     code += "  const int   *id_epj,\n"
     code += "  const EpjGPUIndex *epj,\n"
     code += "        EpjGPU *dev_epj"
-    code += member_decls + "){\n"
-    code += "  const int tid = threadIdx.x;\n"
-    code += "  const int iw = blockIdx.x;\n"
+    code += member_decls + ", const int nmax){\n"
+    code += "  const int tid = blockDim.x*blockIdx.x + threadIdx.x;\n"
+    code += "  const int iw = tid/nmax;\n"
+    code += "  const int lane = tid%nmax;\n"
 
     code += "  const int start_i = ij_disp[iw].x;\n"
-    code += "  const int iii = start_i + tid;\n"
+    code += "  const int iii = start_i + lane;\n"
     code += "  const EpiGPUIndex *epi = epi_orig + start_i;\n"
-    code += "  if(tid < ij_disp[iw+1].x - ij_disp[iw].x){\n"
-    code += "    const int i = tid;\n"
+    code += "  if(lane < ij_disp[iw+1].x - ij_disp[iw].x){\n"
+    code += "    const int i = lane;\n"
     # local vars
     fvars.each{ |v|
       iotype = h[v][0]
@@ -729,8 +730,8 @@ class Kernelprogram
     code += "  }\n"
 
     code += "  const int start_j = ij_disp[iw].y;\n"
-    code += "  const int jjj = start_j + tid;\n"
-    code += "  if(tid < ij_disp[iw+1].y - ij_disp[iw].y){\n"
+    code += "  const int jjj = start_j + lane;\n"
+    code += "  if(lane < ij_disp[iw+1].y - ij_disp[iw].y){\n"
     code += "    const int j = id_epj[jjj];\n"
     # local vars
     fvars.each{ |v|
@@ -920,7 +921,8 @@ class Kernelprogram
     code += "#ifdef PIKG_MEASURE_CUDA_KERNEL_TIME\n"
     code += "  prof.start(\"Kernel\");\n"
     code += "#endif\n"
-    code += "  #{$kernel_name}_generate_ep_cuda <<< n_walk, std::max(ni_max,nj_max) >>> (ij_disp, walk,  dev_epi_index, dev_epi, dev_id_epj, dev_epj_index, dev_epj"
+    code += "  const int nmax = std::max(ni_max, nj_max);\n"
+    code += "  #{$kernel_name}_generate_ep_cuda <<< ((nmax+nthreads-1)/nthreads)*n_walk, nthreads >>> (ij_disp, walk,  dev_epi_index, dev_epi, dev_id_epj, dev_epj_index, dev_epj"
     $varhash.each{|v|
       iotype = v[1][0]
       if iotype == "MEMBER"
@@ -928,7 +930,7 @@ class Kernelprogram
         code += ",#{name}"
       end
     }
-    code += ");\n"
+    code += ",nmax);\n"
     code += "  #{$kernel_name}_cuda <<<nblocks, nthreads>>> (ij_disp, walk,  dev_epi, dev_epj, dev_force"
     $varhash.each{|v|
       iotype = v[1][0]
