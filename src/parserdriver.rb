@@ -1498,7 +1498,7 @@ class String
       self
     end
   end
-  def replace_fdpsname_recursive(h=$varhash)
+  def replace_fdpsname_recursive(h=$varhash, multiwalk=false)
     name = self.dup
     ret = name
     return ret if h[name] == nil
