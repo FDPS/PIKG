@@ -1,0 +1,154 @@
+EPI local F32vec xiloc
+EPI local F32vec viloc
+EPI local F32 miloc
+EPI local F32 uiloc
+EPI local F32 hiloc
+EPI local F32 hi2loc
+EPI local F32 hi4loc
+EPI local F32 hi5loc
+EPI local F32 rhoiloc
+EPI local F32 Piloc
+EPI local F32 filoc
+EPI local F32 ciloc
+EPI local F32 BalSWiloc
+EPI local F32 ailoc
+EPI local F32 epsloc
+
+EPJ local F32vec xjloc
+EPJ local F32vec vjloc
+EPJ local F32 mjloc
+EPJ local F32 ujloc
+EPJ local F32 hjloc
+EPJ local F32 hj2loc
+EPJ local F32 hj4loc
+EPJ local F32 hj5loc
+EPJ local F32 rhojloc
+EPJ local F32 Pjloc
+EPJ local F32 fjloc
+EPJ local F32 cjloc
+EPJ local F32 BalSWjloc
+EPJ local F32 ajloc
+
+F32 g1u
+F32 cfl
+F32 a
+F32 H
+
+function gradW(r,h)
+  u = r/h
+  p1 = max(0.0f,1.0f - u)
+  h2 = h*h
+  h5 = h2*h2*h
+  coeff = 1155.0f * inv(12.5663706144f * h5)
+  p1sq = p1*p1
+  p1p5 = p1sq*p1sq*p1
+  return - coeff * p1p5 * (1.0f + 5.0f * u)
+end
+
+tab0 = { 9.58004170197862318f,7.00522516417044578f,5.35895285590360211f,4.12866206443424342f,3.17062071823030587f,2.41185311812114876f,1.807527024614142441f,1.327023708411639595f,0.947923192455528625f,0.652953821363920891f,0.4282657430174724067f,0.262367050056875637f,0.1454154330327533217f,0.0687017377634103864f,0.0242156190165320471f,0.00416773812099807155f }
+tab1 = { -59.8108501509125188f, -31.05813328092411915f, -22.44668696843435463f, -17.2486364282689537f, -13.58530941613384657f, -10.80687593699297624f, -8.60901668075986312f, -6.82439607574598537f, -5.35129661199654011f, -4.123594784825375975f, -3.096333696234045568f, -2.238156835110497202f ,-1.527171556711805323f, -0.948829213125291506f, -0.495512143316267556f, -0.1702541254620237798f }
+tab2 = { 472.125747428997911f, 89.8785006474572409f, 49.73973974443669843f, 33.684795047245919f, 24.97836215430330778f, 19.4838847817621894f, 15.6789152631370973f, 12.86998444012059337f, 10.69480846022754172f, 8.9445317974717133f, 7.4889013736202793f, 6.240554988761701914f, 5.13575827666686609f, 4.121869456526907f, 3.146437187997371147f, 2.197916376996970456f }
+tab3 = { -2817.13182179913717f, -230.7305434099217958f, -88.8341996044038539f, -47.4683723462677079f, -29.7371881212689023f, -20.50676367606451472f, -15.09880337604735571f, -11.67177812519695984f, -9.38065185944797533f, -7.79538433501862086f, -6.68263935674222611f, -5.91510404149628297f, -5.43624235906013173f, -5.266341660526284156f, -5.62445972826792737f, -8.63456778215224677f }
+
+xiloc = to_f64(a)*(EPI.pos - EPI[0].pos)
+viloc.x = a*(H*to_f32(EPI.pos.x) + EPI.vel.x)
+viloc.y = a*(H*to_f32(EPI.pos.y) + EPI.vel.y)
+viloc.z = a*(H*to_f32(EPI.pos.z) + EPI.vel.z)
+
+miloc = 1.0f/(to_f32(EPI.mass)*EPI.eng*g1u)
+uiloc = EPI.eng*g1u
+hiloc = a * EPI.h
+hi2loc = 1.0f / (a*EPI.h * a*EPI.h)
+hi5loc = 1.0f / (a*EPI.h * a*EPI.h * a*EPI.h * a*EPI.h * a*EPI.h)
+rhoiloc = EPI.dens
+Piloc = 1.0f / EPI.pres
+filoc = EPI.gradh
+ciloc = EPI.snds
+BalSWiloc = EPI.BalSW
+ailoc = EPI.alpha
+epsloc = a*EPI.h*0.00001f * a*EPI.h*0.00001f
+
+xjloc = to_f64(a)*(EPJ.pos - EPI[0].pos)
+vjloc.x = a*(H*to_f32(EPJ.pos.x) + EPJ.vel.x)
+vjloc.y = a*(H*to_f32(EPJ.pos.y) + EPJ.vel.y)
+vjloc.z = a*(H*to_f32(EPJ.pos.z) + EPJ.vel.z)
+mjloc = to_f32(EPJ.mass)
+ujloc = to_f32(EPJ.mass)*EPJ.eng*g1u
+hjloc = a * EPJ.h
+hj2loc = 1.0f / (a*EPJ.h * a*EPJ.h)
+hj5loc = 1.0f / (a*EPJ.h * a*EPJ.h * a*EPJ.h * a*EPJ.h * a*EPJ.h)
+rhojloc = EPJ.dens
+Pjloc = 1.0f / EPJ.pres
+fjloc = EPJ.gradh
+cjloc = EPJ.snds
+BalSWjloc = EPJ.BalSW
+ajloc = EPJ.alpha
+
+#pragma unroll 4
+dr = xiloc - xjloc
+dv = viloc - vjloc
+r2 = dr * dr + epsloc
+dvdr = dr*dv
+
+#pragma statement loop_fission_point
+#pragma unroll 4
+
+r_inv = rsqrt(r2)
+
+#pragma statement loop_fission_point
+#pragma unroll 8
+
+wij = min(0.0f,dvdr*r_inv)
+v_sig = ciloc + cjloc - 3.0f * wij
+FORCE.dt = max(dt,v_sig)
+
+#pragma statement loop_fission_point
+#pragma unroll 8
+aij = 0.25f * (ailoc + ajloc)
+AV = - aij * v_sig * wij * inv(rhoiloc + rhojloc) * (BalSWiloc + BalSWjloc)
+
+#pragma statement loop_fission_point
+#pragma unroll 8
+u_i  = r2 * hi2loc
+du_i = min(u_i,1.0f)
+findex_i = du_i*16.0f
+index_i = to_uint(findex_i)
+index_i = min(index_i,15u)
+du_i = du_i - 0.0625f*to_float(index_i)
+
+c0_i = table(tab0,index_i)
+c1_i = table(tab1,index_i)
+c2_i = table(tab2,index_i)
+c3_i = table(tab3,index_i)
+tmp_i = c0_i + du_i*(c1_i + du_i*(c2_i + du_i*c3_i))
+gradWi = - (tmp_i*tmp_i)*hi5loc
+
+#pragma statement loop_fission_point
+#pragma unroll 8
+u_j = r2 * hj2loc
+du_j = min(u_j,1.0f)
+findex_j = du_j*16.0f
+index_j = to_uint(findex_j)
+index_j = min(index_j,15u)
+du_j = du_j - 0.0625f*to_float(index_j)
+
+c0_j = table(tab0,index_j)
+c1_j = table(tab1,index_j)
+c2_j = table(tab2,index_j)
+c3_j = table(tab3,index_j)
+tmp_j = c0_j + du_j*(c1_j + du_j*(c2_j + du_j*c3_j))
+gradWj = - (tmp_j*tmp_j)*hj5loc
+
+#pragma statement loop_fission_point
+#pragma unroll 1
+
+gradWij = 0.5f*(gradWi + gradWj)
+fij = 1.0f - filoc*inv(ujloc)
+fji = (1.0f - fjloc*miloc)*Pjloc
+tmp0 = uiloc * ujloc
+tmp1 = mjloc * AV
+tmp2 = fij * Piloc * gradWi
+tmp3 = tmp1 * gradWij
+FORCE.eng_dot += (tmp0 * tmp2 + 0.5f * tmp3) * dvdr
+tmp4 = (tmp0 * ( tmp2 + fji * gradWj) + tmp3)
+FORCE.acc -= tmp4 * dr
