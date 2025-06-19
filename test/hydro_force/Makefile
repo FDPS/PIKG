@@ -34,4 +34,4 @@ hydro_force.hpp:	hydro_force.pikg user_defined.h
 	$(PIKG) -o $@ -i $< $(PIKGFLAGS)
 
 clean:
-	rm -f *.hpp main
+	rm -f hydro_force.hpp main

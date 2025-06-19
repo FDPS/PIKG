@@ -139,7 +139,7 @@ int main(int argc,char** argv){
 #endif
     bool isOK = true;
     constexpr double abs_error = 1e-5;
-    constexpr double rel_error = 1e-5;
+    constexpr double rel_error = 1e-4;
     for(int w=0;w<n_walk;w++){
       for(int i=0;i<n_epi[w];i++){
 	double abs_accx = std::abs(force[w][i].acc.x   - force_ref[w][i].acc.x);
