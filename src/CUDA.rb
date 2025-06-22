@@ -586,16 +586,25 @@ class Kernelprogram
           modifier = h[v][3]
           if modifier == "local"
             fdpsname = v
+            @statements.each{ |s|
+              if get_name(s) == v
+                dim = get_tail(s)
+                new_name = "dev_epj[nj_tot]."+fdpsname
+                new_name = new_name + "." + dim if dim != nil
+                new_exp = s.expression.replace_fdpsname_recursive(h,true).replace_recursive("epj","spj")
+                code += "      " + Statement.new([new_name, new_exp,type]).convert_to_code("reference") + "\n"
+              end
+            }
           else
             fdpsname = h[v][2]
+            get_vector_elements(type).each{|dim|
+              if dim == ""
+                code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname,"spj[iw][j]."+fdpsname,type]).convert_to_code("reference") + "\n"
+              else
+                code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname+"."+dim,"spj[iw][j]."+fdpsname+"."+dim,type]).convert_to_code("reference") + "\n"
+              end
+            }
           end
-          get_vector_elements(type).each{|dim|
-            if dim == ""
-              code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname,"spj[iw][j]."+fdpsname,type]).convert_to_code("reference") + "\n"
-            else
-              code += "      " + Statement.new(["dev_epj[nj_tot]."+fdpsname+"."+dim,"spj[iw][j]."+fdpsname+"."+dim,type]).convert_to_code("reference") + "\n"
-            end
-          }
         end
       }
       code += "      nj_tot++;\n"
@@ -812,10 +821,27 @@ class Kernelprogram
     }
     code += "    }\n"
     if $spj_name != nil
-    abort if $spj_name != "PS::SpjMonopole"
     code += "    for(int j=0;j<nsend_spj;j++){\n"
-    code += "      dev_epj_index[j+nsend_epj].mass = epj[j].mass;\n" 
-    code += "      dev_epj_index[j+nsend_epj].pos = epj[j].pos;\n" 
+      fvars_index.each{ |v|
+        iotype = h[v][0]
+        modifier = h[v][3]
+        if iotype == "EPJ"
+          type = h[v][1]
+          modifier = h[v][3]
+          next if modifier == "local"
+          fdpsname = h[v][2]
+          get_vector_elements(type).each{|dim|
+          if dim == ""
+            code += "      " + Statement.new(["dev_epj_index[j+nsend_epj]."+fdpsname,"spj[j]."+fdpsname,type]).convert_to_code("reference") + "\n"
+          else
+            code += "      " + Statement.new(["dev_epj_index[j+nsend_epj]."+fdpsname+"."+dim,"spj[j]."+fdpsname+"."+dim,type]).convert_to_code("reference") + "\n"
+          end
+          }
+        end
+      }
+    #abort if $spj_name != "PS::SPJMonopole"
+    #code += "      dev_epj_index[j+nsend_epj].mass = epj[j].mass;\n" 
+    #code += "      dev_epj_index[j+nsend_epj].pos = epj[j].pos;\n" 
     code += "    }\n"
     end
     code += "    dev_epj_index.h2d(nsend_epj"
