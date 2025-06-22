@@ -509,6 +509,7 @@ class Kernelprogram
     code += "  int nj_tot = 0;\n"
     code += "  prof.start(\"CopyEP\");\n"
     code += "  for(int iw=0; iw<n_walk; iw++){\n"
+    code += "    #pragma omp paralel for\n"
     code += "    for(int i=0; i<n_epi[iw]; i++){\n"
     # epi copy to epi_gpu
     fvars.each{ |v|
@@ -543,6 +544,7 @@ class Kernelprogram
     code += "      walk[ni_tot] = iw;\n"
     code += "      ni_tot++;\n"
     code += "    }\n"
+    code += "    #pragma omp paralel for\n"
     code += "    for(int j=0; j<n_epj[iw]; j++){\n"
     # epj copy to epj_gpu
     fvars.each{ |v|
@@ -577,6 +579,7 @@ class Kernelprogram
     code += "      nj_tot++;\n"
     code += "    }\n"
     if $spj_name != nil
+      code += "    #pragma omp paralel for\n"
       code += "    for(int j=0; j<n_spj[iw]; j++){\n"
       # spj copy to spj_gpu
       fvars.each{ |v|
@@ -613,6 +616,7 @@ class Kernelprogram
     code += "  }\n"
     code += "  prof.end(\"CopyEP\");\n"
     code += "  assert(ni_tot < NI_LIMIT);\n"
+    code += "  assert(nj_tot < NJ_LIMIT);\n"
     code += "  int ni_tot_reg = ni_tot;\n"
     code += "  if(ni_tot_reg % N_THREAD_GPU){\n"
     code += "    ni_tot_reg /= N_THREAD_GPU;\n"
@@ -664,6 +668,7 @@ class Kernelprogram
     code += "\n"
     code += "  int n_cnt = 0;\n"
     code += "  for(int iw=0; iw<n_walk; iw++){\n"
+    code += "    #pragma omp paralel for\n"
     code += "    for(int i=0; i<ni[iw]; i++){\n"
     # accum force
     fvars.each{ |v|
@@ -799,6 +804,7 @@ class Kernelprogram
     code += "    init_call = false;\n"
     code += "  }\n"
     code += "  if(send_particle){\n"
+    code += "    assert(nsend_epj < NJ_LIMIT);\n"
     code += "    #pragma omp parallel for\n"
     code += "    for(int j=0;j<nsend_epj;j++){\n"
     # epj copy to epj_gpu_index
@@ -821,6 +827,8 @@ class Kernelprogram
     }
     code += "    }\n"
     if $spj_name != nil
+    code += "    assert(nsend_epj+nsend_spj < NJ_LIMIT);\n"
+    code += "    #pragma omp parallel for\n"
     code += "    for(int j=0;j<nsend_spj;j++){\n"
       fvars_index.each{ |v|
         iotype = h[v][0]
@@ -898,6 +906,7 @@ class Kernelprogram
     code += "      walk[start+i] = iw;\n"
     code += "    }\n"
     code += "  }\n"
+    code += "  #pragma omp parallel for\n"
     code += "  for(int jj=0; jj<n_walk*nj_max; jj++){\n"
     code += "    const int iw = jj / nj_max;\n"
     code += "    const int j = jj % nj_max;\n"
@@ -906,7 +915,7 @@ class Kernelprogram
     code += "      dev_id_epj[start+j] = id_epj[iw][j];\n"
     code += "    }\n"
     if $spj_name != nil
-    code += "    else{\n"
+    code += "    else if(j-n_epj[iw]<n_spj[iw]){\n"
     code += "      dev_id_epj[start+j] = id_spj[iw][j-n_epj[iw]];\n"
     code += "    }\n"
     end
