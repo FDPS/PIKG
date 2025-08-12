@@ -25,6 +25,9 @@ CFLAGS += -DPARTICLE_SIMULATOR_USE_64BIT_KEY
 all:nbody.out
 
 ifeq ($(use_phantom_grape_x86),yes)
+CC=icpx
+CFLAGS+= -xCORE_AVX2 -qopenmp
+
 PG_ROOT = $(PS_PATH)/phantom_grape_x86/G5/newton/libpg5
 INC += -I$(PG_ROOT)
 CFLAGS  += -DENABLE_PHANTOM_GRAPE_X86
@@ -88,7 +91,9 @@ PKG_CONFIG_PATH=$(MNCL_ROOT)/lib/pkgconfig
 CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --cflags mncl)
 LDFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs mncl)
 CFLAGS+=-I$(MNCL_ROOT)/include
-LDFLAGS+=-lmncl -L$(MNCL_ROOT)/lib -Wl,-rpath=$(MNCL_ROOT)/lib
+CFLAGS+=-I$(PFCOMP_ROOT)
+#LDFLAGS+=-lmncl
+LDFLAGS+=-L$(MNCL_ROOT)/lib -Wl,-rpath=$(MNCL_ROOT)/lib
 endif
 
 PIKG_FLAGS= --conversion-type $(CONVERSION_TYPE)

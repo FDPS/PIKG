@@ -658,3 +658,38 @@ index 3ce12f1..a0bf274 100644
  #endif
    
      template<class Ttc>
+diff --git a/src/phantom_grape_x86/G5/newton/libpg5/Makefile b/src/phantom_grape_x86/G5/newton/libpg5/Makefile
+index b5ab7f7..f45c1b1 100644
+--- a/src/phantom_grape_x86/G5/newton/libpg5/Makefile
++++ b/src/phantom_grape_x86/G5/newton/libpg5/Makefile
+@@ -1,8 +1,16 @@
+-CC=gcc
+-CFLAGS=-mavx -O3 -Wall -ffast-math -funroll-loops
++#CC=gcc
++#CFLAGS=-mavx -O3 -Wall -ffast-math -funroll-loops
++AR=ar
++RANLIB=ranlib
++
++ONEAPI_ROOT=/opt/intel/oneapi
++CC=icx
++CFLAGS=-xAVX2 -O3 -ffast-math -unroll
++#AR=$(ONEAPI_ROOT)/compiler/latest/bin/compiler/llvm-ar
++#RANLIB=$(ONEAPI_ROOT)/compiler/latest/bin/compiler/llvm-ranlib
+ 
+ #enable_openmp = yes
+-#enable_avx2 = yes
++enable_avx2 = yes
+ 
+ ifeq ($(enable_openmp), yes)
+ CFLAGS += -fopenmp -DENABLE_OPENMP
+@@ -14,8 +22,8 @@ LIBPG5OBJ = gravity_avx2.o phantom_g5.o rsqrt.o pg5_fortran.o
+ endif
+ 
+ libpg5.a: $(LIBPG5OBJ)
+-	ar -r $@ $^
+-	ranlib $@
++	$(AR) -r $@ $^
++	$(RANLIB) $@
+ 
+ clean:
+ 	rm -rf *.o
