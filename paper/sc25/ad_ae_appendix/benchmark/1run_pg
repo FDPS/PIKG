@@ -1,0 +1,80 @@
+#!/bin/bash
+
+. /opt/intel/oneapi/setvars.sh
+
+set -x
+
+PIKG_ROOT=../../../../
+FDPS_ROOT=$(HOME)/FDPS
+
+export NTHREADS=6
+export KMP_AFFINITY=verbose,compact
+export KMP_HW_SUBSET=${NTHREADS}c,1t
+
+nptcl=$((896*256))
+PIKG_ROOT=$PIKG_ROOT FDPS_ROOT=$FDPS_ROOT use_phantom_grape_x86=yes make -B
+
+measurement_dir=measurements
+log_dir=$measurement_dir/PG/logs
+fig_dir=$measurement_dir/fig
+mkdir -p $log_dir $fig_dir
+
+for n in 32 64 128 256 512 1024 2048 4096; do
+for l in 8 64; do
+./nbody.out -N $nptcl -n $n -l $l -t 0.5 -T 0.125 &> $log_dir/n${nptcl}_ng${n}_l${l}.log
+done
+done
+
+# group_limit dependency of CPU test
+gpl=$log_dir/../pg_group_limit.gpl
+dat=$log_dir/../pg_group_limit_test.dat
+./scripts/kernel_perf_and_throughput.sh $log_dir/n${nptcl}*l8.log > $dat
+cat << EOF > $gpl
+set term pdf
+
+set xlabel "Group limit"
+set ylabel "steps per second"
+set y2tics
+set y2label "Gflops"
+set ytics nomirror
+set key left
+
+set yrange [0:40]
+set y2range  [0:500]
+
+set boxwidth 0.5 relative
+set style fill solid border lc rgb "black"
+
+set grid y
+
+set output "$fig_dir/pg_group_limit.pdf"
+p "$dat" u 0:4 axis x1y2 w boxes lw 2 ti "Kernel performance", \
+  "$dat" u 0:(16/\$3):xtic(1) w lp ti "Throughput"
+EOF
+gnuplot $gpl
+
+exit 0
+
+# group_limit dpendency of number of interaction
+dat=$log_dir/../ninteraction.dat
+gpl=$log_dir/../ninteraction.gpl
+./scripts/ninteraction.sh $(ls $log_dir/* | grep l8)  >  $dat
+./scripts/ninteraction.sh $(ls $log_dir/* | grep l64) >> $dat
+cat << EOF > $gpl
+set term pdf
+
+set xlabel "Group limit"
+set ylabel "10^9 interactions"
+
+set yrange [0:30]
+
+set boxwidth 0.3 relative
+set style fill solid border lc rgb "black"
+
+set grid y
+
+set output "$fig_dir/ninteraction.pdf"
+p "$dat" u (\$0-0.15):(\$3/1000000000):xtic(1) i 0 w boxes lw 2 ti "leaf limit=8", \
+  "$dat" u (\$0+0.15):(\$3/1000000000)         i 1 w boxes lw 2 ti "leaf limit=64"
+EOF
+gnuplot $gpl
